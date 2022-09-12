@@ -61,6 +61,10 @@ pop2 <- pop1 %>%
   group_by(date, agec, race_recode) %>%
   summarize(pop.interpol= sum(pop.interpol)) %>%
   mutate(race_recode= factor(race_recode,levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')))
+
+pop2.sex <- pop1 %>%
+  group_by(date, agec, sex) %>%
+  summarize(pop.interpol= sum(pop.interpol)) 
 ```
 
 Deaths by state
@@ -135,7 +139,7 @@ county_deaths_abcs <- pneumo.deaths %>%
 
 county_pop <- county_census %>%
   dplyr::select(FIPS, POPESTIMATE2019 ) %>%
-  filter(FIPS %in% all.counties) %>%
+  filter(FIPS %in% all.abcs.counties) %>%
   rename(pop=POPESTIMATE2019)
 
 county_deaths_abcs <- merge(county_deaths_abcs, county_pop, by.x='county_fips', by.y='FIPS', all=T)
@@ -235,6 +239,37 @@ ggplot(p3.ds, aes(x=agec, y=log(inc), group=race_recode,col=race_recode)) +
   ggtitle('Rate of death by age and race/ethnicity')+
    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
   ylab('log(Deaths/100,000)') +
+  xlab('')
+```
+Sex and age
+```{r}
+p3 <- death_plot_fun(year,month, sex, agec) 
+
+p3$ts$date <- as.Date(paste(p3$ts$year, p3$ts$month, '01',sep='-') , '%Y-%m-%d' )
+
+p3$ts$year <- as.numeric(as.character(p3$ts$year))
+
+p3.ds <- merge(p3$ts, pop2.sex, by=c('agec','sex', 'date')) %>%
+  filter(year<2020) %>% #Pre-padnemic rates
+  group_by(sex, agec) %>%
+  summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
+  ungroup() %>%
+  mutate(inc=N_deaths/pop*100000 , sex=factor(sex)) 
+
+ggplot(p3.ds, aes(x=agec, y=log(inc), group=sex,col=sex)) +
+  geom_line()+
+  theme_classic()+
+  ggtitle('Rate of death by age and sex')+
+   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+  ylab('log(Deaths/100,000)') +
+  xlab('')
+
+ggplot(p3.ds, aes(x=agec, y=(inc), group=sex,col=sex)) +
+  geom_line()+
+  theme_classic()+
+  ggtitle('Rate of death by age and sex')+
+   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+  ylab('(Deaths/100,000)') +
   xlab('')
 ```
 
