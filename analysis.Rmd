@@ -15,6 +15,7 @@ library(arules)
 library(usdata)
 library(covidcast)
 library(arulesViz)
+library(directlabels)
 source('./R/death_plot_fun.R')
 source('./R/pred_interval.R')
 
@@ -161,7 +162,7 @@ all.abcs.state.counties <- c(all.abcs.counties,abcs.state.counties$FIPS)
 ```
 
 ```{r}
-sort(table(pneumo.deaths$all_icd), decreasing=T)[1:100]
+#sort(table(pneumo.deaths$all_icd), decreasing=T)[1:100]
 ```
 
 
@@ -169,11 +170,14 @@ sort(table(pneumo.deaths$all_icd), decreasing=T)[1:100]
 ```{r}
 p1 <- death_plot_fun(year,month, J13 )
 p1$plot1 +
-  facet_wrap(~J13)
+  facet_wrap(~J13) +
+  ggtitle('J13 vs other pneumococcal codes')
 
 p1 <- death_plot_fun(year,month, A403 )
 p1$plot1 +
-  facet_wrap(~A403)
+  facet_wrap(~A403) +
+    ggtitle('A40.3 vs other pneumococcal codes')
+
 
 p1 <- death_plot_fun(year,month, j154 )
 p1$plot1 +
@@ -219,7 +223,7 @@ p3 <- death_plot_fun(year,month, race_recode, agec)
 p4
 ```
 
-```{r}
+```{r,fig.width=unit(15,"cm"), fig.height=unit(7,"cm")}
 p3 <- death_plot_fun(year,month, race_recode, agec) 
 
 p3$ts$date <- as.Date(paste(p3$ts$year, p3$ts$month, '01',sep='-') , '%Y-%m-%d' )
@@ -259,7 +263,7 @@ p3.ds <- merge(p3$ts, pop2.sex, by=c('agec','sex', 'date')) %>%
 ggplot(p3.ds, aes(x=agec, y=log(inc), group=sex,col=sex)) +
   geom_line()+
   theme_classic()+
-  ggtitle('Rate of death by age and sex')+
+  ggtitle('Rate of pneumococcal death by age and sex')+
    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
   ylab('log(Deaths/100,000)') +
   xlab('')
@@ -267,7 +271,7 @@ ggplot(p3.ds, aes(x=agec, y=log(inc), group=sex,col=sex)) +
 ggplot(p3.ds, aes(x=agec, y=(inc), group=sex,col=sex)) +
   geom_line()+
   theme_classic()+
-  ggtitle('Rate of death by age and sex')+
+  ggtitle('Rate of pneumococcal death by age and sex')+
    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
   ylab('(Deaths/100,000)') +
   xlab('')
@@ -379,6 +383,9 @@ ggplot(data=ds2, aes(x=date, y=rr_median)) +
 race/ethnicity and age
 
 ```{r, fig.width=8, fig.height=8}
+
+p3 <- death_plot_fun(year,month, race_recode, agec) 
+
 ds3 <- p3$ts %>%
   mutate(date=as.Date(paste(year, month, '01', sep='-')),
          qtr=as.factor(lubridate::quarter(date)),
@@ -530,7 +537,9 @@ pneumo.deaths <- pneumo.deaths %>%
 
 p3_abcs <- death_plot_fun(year,month, abcs_region) 
 
-p3_abcs$plot1+ facet_wrap(~abcs_region, scales='free')
+p3_abcs$plot1+ facet_wrap(~abcs_region, scales='free') + 
+  theme(legend.position = "none")
+
 
 
 pneumo.deaths %>%
@@ -603,7 +612,7 @@ p5$plot1+ facet_wrap(agec~education_recode, scales='free', ncol=3)
 ```
 
 This shows a clear spike in pneumococcal mortality among young adults with HS education or lower during the first wave. This makes sense since these people are probably the least likely to be able to isolate
-```{r}
+```{r, fig.width=7, fig.height=5}
 
 ds5 <- p5$ts %>%
   filter(education_recode %in% c(1,2)) %>%
@@ -670,6 +679,22 @@ ggplot(data=ds5, aes(x=date, y=rr_median)) +
     geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
 
   facet_wrap(education_recode~agec, nrow=2)
+```
+
+## ABCs deaths from BactFacts
+Only through 2019
+
+```{r}
+# d1 <-read.csv('https://data.cdc.gov/api/views/en3s-hzsr/rows.csv?accessType=DOWNLOAD')
+# saveRDS(d1, './Data/abcs_data.rds')
+
+d1 <- readRDS('./Data/abcs_data.rds') %>%
+  filter(Topic=='Death Rates' & ViewBy2 !='Overall' & ViewBy=='Age')
+
+
+ggplot(d1, aes(x=Year, y=Value, color=ViewBy2)) +
+         geom_line() +
+         theme_classic()
 ```
 
 ## Get latest data from CDC WONDER
