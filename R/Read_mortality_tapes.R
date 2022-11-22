@@ -36,6 +36,30 @@ library(cdlTools)
 
 df1 <- readRDS('./CONFIDENTIAL/compiled_data.rds')
 
+#take a 1% sample for use in workshop demonstrations
+df1_sample <- df1 %>% sample_n( round(0.01*nrow(df1))) %>%
+  mutate(age_detail_number = as.numeric(age_detail_number),
+
+         agey= if_else(age_detail_class==1, age_detail_number,
+              if_else(    age_detail_class==2,age_detail_number/12,
+         if_else(age_detail_class==4,age_detail_number/365,
+         if_else(age_detail_class==5,age_detail_number/365/24,
+         if_else(age_detail_class==6,age_detail_number/365/24/60,99999))))) , 
+         
+         hisp_recode = if_else(hispanic<=199 & hispanic>=100,0,
+                        if_else(hispanic>=200 & hispanic <=299,1,999)),
+         
+         race_recode = if_else( race %in% c('01') & hisp_recode!=1 ,1,
+                       if_else(race %in% c('02') & hisp_recode!=1 ,2,
+                       if_else(race %in% c('03') & hisp_recode!=1 ,4,
+                       if_else(race %in% c('04','05','18','28','48','68','78') & hisp_recode!=1 ,5,
+                       if_else(race %in% c('06','07','38','58') & hisp_recode!=1 ,5,
+                       if_else(hisp_recode==1,3,999))))))
+         )%>%
+  select(month, sex, year, race_recode, agey,  starts_with('icd')) 
+saveRDS(df1_sample,'./Data/mortality_1percent.rds')
+
+
 #Combine all the ICD codes into a single variable separated by _
 df1 <-  df1 %>%
   unite(all_icd, icd1:icd21, na.rm=F)
