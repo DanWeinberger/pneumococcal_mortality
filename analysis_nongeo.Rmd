@@ -29,6 +29,11 @@ source('./R/Format_US_Population.R')
 ```
 
 ```{r}
+
+```
+
+
+```{r}
 pneumo.deaths <-   readRDS('./CONFIDENTIAL/pneumococcal_deaths_line_list_geo.rds')
 
 #the file has other suspected deaths like lobar pneumonia; this filters those out
