@@ -214,7 +214,7 @@ p3$plot1+ facet_wrap(~race_recode, scales='free')
 ```
 
 
-Age of deaths, by race/ethnicity. The proportion of deaths among kids is much higher for Black and Hispanic populations. need to look at incidence by age
+Age of deaths, by race/ethnicity. The proportion of deaths among kids is much higher for Black and Hispanic populations. need to look at incidence by age; only valid for period before 2021
 ```{r}
 
 p3 <- death_plot_fun(year,month, race_recode, agec) 
@@ -692,7 +692,7 @@ ggplot(data=ds5, aes(x=date, y=rr_median)) +
 ```
 
 ## ABCs deaths from BactFacts
-Only through 2019
+Only through 2020
 
 ```{r}
 # d1 <-read.csv('https://data.cdc.gov/api/views/en3s-hzsr/rows.csv?accessType=DOWNLOAD')
@@ -702,9 +702,10 @@ d1 <- readRDS('./Data/abcs_data.rds') %>%
   filter(Topic=='Death Rates' & ViewBy2 !='Overall' & ViewBy=='Age')
 
 
-ggplot(d1, aes(x=Year, y=Value, color=ViewBy2)) +
+p1 <- ggplot(d1, aes(x=Year, y=Value, color=ViewBy2)) +
          geom_line() +
          theme_classic()
+ggplotly(p1)
 ```
 
 ## Get latest data from CDC WONDER
@@ -740,6 +741,16 @@ p1 <- ggplot(mydata2, aes(x=month, y=Deaths, group=year, color=year)) +
 p1
 
 ggplotly(p1)
+
+p2 <- ggplot(mydata2, aes(x=date, y=Deaths)) +
+  geom_line()+
+  theme_classic()+
+  ylim(0, NA) +
+  facet_wrap(~Multiple.Cause.of.death.Code)+
+  geom_vline(xintercept=as.numeric(as.Date('2018-01-01','2019-01-01','2020-01-01','2021-01-01', '2022-01-01')))
+  
+p2
+
 ```
 age and race both have too many suppressed rows to make it interpretable from wonder
 ```{r, eval=F}

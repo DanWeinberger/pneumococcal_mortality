@@ -17,6 +17,8 @@ library(usdata)
 library(covidcast)
 library(arulesViz)
 library(directlabels)
+library(arrow)
+library(duckdb)
 source('./R/death_plot_fun.R')
 source('./R/pred_interval.R')
 
@@ -28,13 +30,15 @@ source('./R/Format_US_Population.R')
 
 ```
 
+Parquet file created with './R/Read_mortality_tapes_nongeo_parquet.R'
 ```{r}
-
+pneumo.deaths <-  open_dataset("R:/NCHS_mortality_public/parquet", format = "parquet") %>%
+   filter(pneumococcal==1 | j154==1 |j181==1  ) %>%
+  collect() 
 ```
 
 
 ```{r}
-pneumo.deaths <-   readRDS('./CONFIDENTIAL/pneumococcal_deaths_line_list_geo.rds')
 
 #the file has other suspected deaths like lobar pneumonia; this filters those out
 pneumo.deaths <- pneumo.deaths %>%
