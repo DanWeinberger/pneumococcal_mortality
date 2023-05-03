@@ -440,39 +440,6 @@ ggplot(data=ds3, aes(x=date, y=rr_median)) +
   facet_wrap(race_recode~agec, nrow=2)
 ```
 
-By region (for use with internal data only)
-
-```{r}
-
-pneumo.deaths <- pneumo.deaths %>%
-  mutate(region = if_else( state %in% c('ME','VT','NH','MA','CT','RI','NY','NJ','PA'), 'Northeast',
-                  if_else( state %in% c('DE','DC','FL','GA','MD','NC','SC','VA','WV','AL','MS','KY','TN','LA','OK','TX', 'AR'), 'South',
-                  if_else( state %in% c('AZ','CA','CO','ID','NM','MT','UT','WY','NV','AK','CA','HI','OR','WA'), 'West', 
-    if_else(state %in% c('IN','IL','MI','OH','WI','IA','KS','MN','MO','NE','ND','SD'), 'Midwest', 'NA' )))))
-
-
-p3_reg <- death_plot_fun(year,month, region) 
-
-p3_reg$plot1+ facet_wrap(~region, scales='free')
-```
-
-By ABCS vs non-ABCs catchment (for use with internal data only)
-
-```{r}
-pneumo.deaths <- pneumo.deaths %>%
-  mutate(abcs_region = (county_fips %in% all.abcs.state.counties  ) )
-
-p3_abcs <- death_plot_fun(year,month, abcs_region) 
-
-p3_abcs$plot1+ facet_wrap(~abcs_region, scales='free') + 
-  theme(legend.position = "none")
-
-
-
-pneumo.deaths %>%
-  group_by(abcs_region, year) %>%
-  summarize(N_deaths=n())
-```
 
 
 Occupation--86% missing
