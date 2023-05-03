@@ -21,6 +21,7 @@ source('./R/death_plot_fun.R')
 source('./R/pred_interval.R')
 
 source('./R/Format_US_Population.R')
+source('./R/seasonal_baseline_func.R')
 
 #https://github.com/socdataR/wonderapi
 #devtools::install_github("socdataR/wonderapi", build_vignettes = F, force=T)
@@ -202,8 +203,8 @@ p2$plot1 + facet_wrap(~agec, scales='free')
 
 By syndrome as well
 ```{r, fig.height=10, fig.width=5}
-p2a <- death_plot_fun(year,month, agec, J13) 
-p2a$plot1 + facet_wrap(agec~J13, scales='free', ncol=2)
+p2a.j13 <- death_plot_fun(year,month, agec, J13) 
+p2a.j13$plot1 + facet_wrap(agec~J13, scales='free', ncol=2)
 ```
 
 
@@ -292,6 +293,7 @@ ggplot(p3.ds, aes(x=agec, y=(inc), group=sex,col=sex)) +
 
 Fit model to 2014-2019 data, extrapolate to 2020 and beyond
 
+All pneumococcus, all ages
 ```{r}
 ds1 <- p1.pneumococcal$ts %>%
   mutate(date=as.Date(paste(year, month, '01', sep='-')),
@@ -305,26 +307,41 @@ ds1 <- p1.pneumococcal$ts %>%
          log_offset=log(1))
 
 #Poisson
-mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
-            data=ds1, family='poisson')
+# mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
+#             data=ds1, family='poisson')
 
 #Negative binomial
-# mod1 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
-#             data=ds1)
+mod1 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 + sin6 +cos6,
+            data=ds1)
 
-ds1 <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='poisson'))
+ds1a <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='negbin'))
 
-ggplot(data=ds1, aes(x=date, y=N_deaths)) +
+dates_vline <- as.Date(c("2020-03-01", "2021-08-01"))                 # Define positions of vline
+dates_vline <- which(ds1a$date %in% dates_vline)
+
+
+ggplot(data=ds1a, aes(x=date, y=N_deaths)) +
   geom_line() +
   theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2)
+  geom_line(aes(x=date, y=pred_median), lty=3, col='red')+
+    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.1) +
+  geom_vline(xintercept=as.numeric(ds1a$date[dates_vline]), lty=2, col='gray')+
+    annotate("text", x=as.Date('2020-03-22'), y=200, label="March 2020", angle=90, size=4, color="darkgray") +
+    annotate("text", x=as.Date('2021-08-22'), y=200, label="August 2021", angle=90, size=4, color="darkgray") +
+  ylab('Number of deaths') +
+  xlab('Date')
 
 
-ds1 <- ds1 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
 
 
-ggplot(data=ds1, aes(x=date, y=rr_median)) +
+ds1a <- ds1a %>%
+  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_ucl, rr_ucl=N_deaths/pred_lcl,
+         
+         rr_ucl=if_else(rr_ucl>2.2,2.199, rr_ucl),
+         rr_lcl=if_else(rr_lcl<0.5,0.5001,rr_lcl))
+
+
+ggplot(data=ds1a, aes(x=date, y=rr_median)) +
   geom_line() +
   theme_classic()+
     geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
@@ -333,60 +350,42 @@ ggplot(data=ds1, aes(x=date, y=rr_median)) +
 
 ```
 
-Did the rate change by age group or ethnic group?
+J13, all ages
 ```{r}
-ds2 <- p2$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
-         log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
+p.j13 <- death_plot_fun(year,month, J13) %>%
+   magrittr::extract2('ts') %>%
+  filter(J13==1) %>%
+  seasonal_baseline_func()
 
-mod.mat2 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec, data=ds2))
-names(mod.mat2) <- gsub('-','_',names(mod.mat2))
-names(mod.mat2) <- gsub(' ','_',names(mod.mat2))
+p.j13$ts.plot
 
-ds2 <- cbind.data.frame(ds2,mod.mat2[,grep('agec', names(mod.mat2))] )
+p.j13$rr.plot
 
-#Poisson
-mod2 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + agec25_44_years +
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older , 
-            data=ds2, family='poisson')
+```
 
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
+non-J13, all ages
+```{r}
+p.j13 <- death_plot_fun(year,month, J13) %>%
+   magrittr::extract2('ts') %>%
+  filter(J13==1) %>%
+  seasonal_baseline_func()
 
-ds2 <- cbind.data.frame(ds2,pred_interval(mod=mod2,model.type='poisson',ds.glm=ds2))
+p.j13$ts.plot
 
-ggplot(data=ds2, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(~agec)+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
+p.j13$rr.plot
+```
 
+Did the rate change by age group?
+```{r}
 
+p.age <- death_plot_fun(year,month, agec) %>%
+   magrittr::extract2('ts') %>%
+  filter(agec %in% c('25-44 years','45-64 years', '65-74 years','75-84 years','85 years and older')) %>%
+  group_by(agec) %>%
+do( plots= seasonal_baseline_func(.) ) 
 
-ds2 <- ds2 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
+p.age$plots
 
-
-ggplot(data=ds2, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
-  ylim(0.1,5) +
-  geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-
-  facet_wrap(~agec)
 
 ```
 
@@ -752,10 +751,32 @@ p2 <- ggplot(mydata2, aes(x=date, y=Deaths)) +
 p2
 
 ```
+
+Join the overall summary data from WONDER, which is more recent but only gos to 2018 with summary data from NCHS, which only goes to 2021
+```{r}
+wonder1 <- mydata2 %>%
+  select(date, month, year, Deaths,Multiple.Cause.of.death.Code) %>%
+  rename(icd = Multiple.Cause.of.death.Code)
+
+
+
+```
+
 age and race both have too many suppressed rows to make it interpretable from wonder
 ```{r, eval=F}
 
-mydata1_race <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 through Last Month 2023_03_17 race.txt', header=T, sep="\t")
+mydata1_age <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 through Last Month 2023_03_17 age.txt', header=T, sep="\t") %>%
+  filter(Ten.Year.Age.Groups %in% c("55-64 years", "65-74 years", "75-84 years", "85+ years") & Multiple.Cause.of.death.Code=='J13') %>%
+  mutate(date= as.Date(paste0(substr(Month,1,3),substr(Year,1,4), '01'), '%b%Y%d'), month=lubridate::month(date),
+         year=as.factor(lubridate::year(date))) %>%
+ggplot( aes(x=date, y=Deaths)) +
+  geom_point()+
+  theme_classic()+
+  ylim(0, NA) +
+  facet_wrap(~Ten.Year.Age.Groups)
+  
+mydata1_age
+
 
 ```
 

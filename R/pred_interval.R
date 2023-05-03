@@ -16,7 +16,7 @@ pred.coefs.reg.mean <-
 if(model.type=='poisson'){
 form2 <- update(mod$formula, 'N_deaths~. ')
 }else{
-form2 <- as.formula(paste0( 'N_deaths~'  ,mod$terms[[3]] ))
+form2 <- formula(paste( 'N_deaths~'  ,paste0(names(coef(mod1))[-1], collapse='+')))
 }
 mod.mat.pred <- model.matrix(form2, data = ds.glm, family = "poisson")
 
