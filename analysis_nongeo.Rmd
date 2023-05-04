@@ -7,18 +7,21 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = F)
-library(dplyr)
-library(lubridate)
-library(ggplot2)
-library(MASS)
-library(plotly)
-library(arules)
-library(usdata)
-library(covidcast)
-library(arulesViz)
-library(directlabels)
-library(arrow)
-library(duckdb)
+
+#install.packages("groundhog")
+#library("groundhog")
+
+pkgs <- c("dplyr","lubridate", 'ggplot2', 'MASS','plotly','arules','usdata','covidcast','arulesViz',
+          'directlabels', 'arrow','duckdb', 'cdlTools', 'readr','reshape2','tidyr','pbapply', 'parquetize')
+
+lapply(pkgs, library,  character.only = TRUE)
+
+library(DBI)
+
+#groundhog.library(pkgs, "2022-04-21")
+
+#groundhog.library('parquetize','2022-04-22')
+
 source('./R/death_plot_fun.R')
 source('./R/pred_interval.R')
 
@@ -31,12 +34,35 @@ source('./R/Format_US_Population.R')
 ```
 
 Parquet file created with './R/Read_mortality_tapes_nongeo_parquet.R'
-```{r}
-pneumo.deaths <-  open_dataset("R:/NCHS_mortality_public/parquet", format = "parquet") %>%
-   filter(pneumococcal==1 | j154==1 |j181==1  ) %>%
-  collect() 
-```
 
+Following CDC wonder: 6 race categories - American Indian or Alaska Native (AIAN); Asian; Black or African American; More than one race; Native Hawaiian or Other Pacific Islander (NHOPI); White.
+
+```{r}
+pneumo.deaths <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = "parquet")  %>%
+  filter(grepl("j13|A39|J181|A403|B953|G001", all_icd)) %>%
+ collect() %>%
+  mutate( 
+   a403 = 1*grepl('A403',all_icd),
+    j13 = 1*grepl('j13', all_icd),
+    b953 = 1*grepl('B953', all_icd),
+    g001 = 1*grepl('G001', all_icd),
+    pneumococcal =  1*((a403 + j13 + b953 + g001 )>0)  ,
+    covid = grepl('U071', all_icd),
+    j154 =1 *grepl('J154', all_icd), #streptococcal pneumonia
+    j181 =1 *grepl('J181', all_icd), #unspecified lobar pneumonia
+    streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
+                                  grepl('A409',all_icd) )>0,
+   agec = if_else(agey>=0 & agey<5,1,
+                   if_else(agey>=5 & agey<25,2,
+                   if_else(agey>=25 & agey<45,3,
+                   if_else(agey>=45 & agey<65,4,
+                   if_else(agey>=65 & agey<75,5,
+                   if_else(agey>=75 & agey<85,6,
+                   if_else(agey>=85 & agey<120,7,
+                           999)))))))
+                               ) 
+
+```
 
 ```{r}
 
@@ -47,21 +73,14 @@ pneumo.deaths <- pneumo.deaths %>%
 
 deaths2019 <- pneumo.deaths %>% filter(year==2019) %>% summarize(N=n())
 
-pneumo.deaths$agec <- factor(pneumo.deaths$agec, c("Under 5 Years",'5-24 years', "25-44 years","45-64 years","65-74 years" ,"75-84 years","85 years and older"))
+pneumo.deaths$agec <- factor(pneumo.deaths$agec, c(1,2,3,4,5,6,7,999),c("Under 5 Years",'5-24 years', "25-44 years","45-64 years","65-74 years" ,"75-84 years","85 years and older", 'missing'))
 
-pneumo.deaths$race_recode <- factor(pneumo.deaths$race_recode, levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')) 
+pneumo.deaths$race_recode_new <- factor(pneumo.deaths$race_recode_new, levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')) 
 
 pneumo.deaths$one <- 1
 
-#Collect all of the ICD codes into a single field
-pneumo.deaths$all_icd <- apply(pneumo.deaths[, grep('icd', names(pneumo.deaths))], 1, function(x) paste(x, collapse=' ' ))
 
-pneumo.deaths$J13 <- grepl('J13',pneumo.deaths$all_icd)
-pneumo.deaths$A403 <- grepl('A403',pneumo.deaths$all_icd)
-
-pneumo.deaths$pneumo <- 1
-
-table(pneumo.deaths$J13,pneumo.deaths$A403 )
+table(pneumo.deaths$j13,pneumo.deaths$a403 )
 ```
 
 
@@ -73,7 +92,7 @@ pop1 <- readRDS('./Data/pop_interpol.rds')
 pop2 <- pop1 %>%
   group_by(date, agec, race_recode) %>%
   summarize(pop.interpol= sum(pop.interpol)) %>%
-  mutate(race_recode= factor(race_recode,levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')))
+  mutate(race_recode_new= factor(race_recode,levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')))
 
 pop2.sex <- pop1 %>%
   group_by(date, agec, sex) %>%
@@ -88,14 +107,14 @@ pop2.sex <- pop1 %>%
 
 
 ```{r}
-p1 <- death_plot_fun(year,month, J13 )
+p1 <- death_plot_fun(year,month, j13 )
 p1$plot1 +
-  facet_wrap(~J13) +
-  ggtitle('J13 vs other pneumococcal codes')
+  facet_wrap(~j13) +
+  ggtitle('j13 vs other pneumococcal codes')
 
-p1 <- death_plot_fun(year,month, A403 )
+p1 <- death_plot_fun(year,month, a403 )
 p1$plot1 +
-  facet_wrap(~A403) +
+  facet_wrap(~a403) +
     ggtitle('A40.3 vs other pneumococcal codes')
 
 
@@ -119,52 +138,52 @@ p2$plot1 + facet_wrap(~agec, scales='free')
 
 By syndrome as well
 ```{r, fig.height=10, fig.width=5}
-p2a <- death_plot_fun(year,month, agec, J13) 
-p2a$plot1 + facet_wrap(agec~J13, scales='free', ncol=2)
+p2a <- death_plot_fun(year,month, agec, j13) 
+p2a$plot1 + facet_wrap(agec~j13, scales='free', ncol=2)
 ```
 
 
 Note; big differences in age distribution. Hispanic skews much younger
 ```{r}
-p3 <- death_plot_fun(year,month, race_recode) 
-p3$plot1+ facet_wrap(~race_recode, scales='free')
+p3 <- death_plot_fun(year,month, race_recode_new) 
+p3$plot1+ facet_wrap(~race_recode_new, scales='free')
 ```
 
 
 Age of deaths, by race/ethnicity. The proportion of deaths among kids is much higher for Black and Hispanic populations. need to look at incidence by age
 ```{r}
 
-p3 <- death_plot_fun(year,month, race_recode, agec) 
+p3 <- death_plot_fun(year,month, race_recode_new, agec) 
 
  p4 <- ggplot(pneumo.deaths, aes(x=agey))+
   geom_histogram() +
   theme_classic() +
-  facet_wrap(~race_recode, scales='free_y')
+  facet_wrap(~race_recode_new, scales='free_y')
 p4
 ```
 
 ```{r,fig.width=unit(15,"cm"), fig.height=unit(7,"cm")}
-p3 <- death_plot_fun(year,month, race_recode, agec) 
+p3 <- death_plot_fun(year,month, race_recode_new, agec) 
 
 p3$ts$date <- as.Date(paste(p3$ts$year, p3$ts$month, '01',sep='-') , '%Y-%m-%d' )
 
 p3$ts$year <- as.numeric(as.character(p3$ts$year))
 
-p3.ds <- merge(p3$ts, pop2, by=c('agec','race_recode', 'date')) %>%
+p3.ds <- merge(p3$ts, pop2, by=c('agec','race_recode_new', 'date')) %>%
   filter(year<2020) %>% #Pre-padnemic rates
-  group_by(race_recode, agec) %>%
+  group_by(race_recode_new, agec) %>%
   summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
   ungroup() %>%
-  mutate(inc=N_deaths/pop*100000 , race_recode=factor(race_recode)) 
+  mutate(inc=N_deaths/pop*100000 , race_recode_new=factor(race_recode_new)) 
 
-ggplot(p3.ds, aes(x=agec, y=log(inc), group=race_recode,col=race_recode)) +
+ggplot(p3.ds, aes(x=agec, y=log(inc), group=race_recode_new,col=race_recode_new)) +
   geom_line()+
   theme_classic()+
   ggtitle('Rate of death by age and race/ethnicity')+
    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
   ylab('log(Deaths/100,000)') +
   xlab('') +
-    geom_dl(aes(label = race_recode), method = "first.qp") +
+    geom_dl(aes(label = race_recode_new), method = "first.qp") +
    # Allow labels to bleed past the canvas boundaries
     coord_cartesian(clip = 'off') +
     # Remove legend & adjust margins to give more space for labels
@@ -311,7 +330,7 @@ race/ethnicity and age
 
 ```{r, fig.width=8, fig.height=8}
 
-p3 <- death_plot_fun(year,month, race_recode, agec) 
+p3 <- death_plot_fun(year,month, race_recode_new, agec) 
 
 ds3 <- p3$ts %>%
   mutate(date=as.Date(paste(year, month, '01', sep='-')),
@@ -325,17 +344,17 @@ ds3 <- p3$ts %>%
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
-mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode, data=ds3))
+mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode_new, data=ds3))
 names(mod.mat3) <- gsub('-','_',names(mod.mat3))
 names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
 names(mod.mat3) <- gsub('/','_',names(mod.mat3))
-#names(mod.mat3) <- gsub('race_recode','',names(mod.mat3), fixed=T)
+#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
 
-ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode', names(mod.mat3)))] )
+ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode_new', names(mod.mat3)))] )
 
 #Poisson
 mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + agec25_44_years +
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + race_recodeBlack +race_recodeHispanic + race_recodeAmerican_Indian + race_recodeAsian_Pacific_Islanders , 
+                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + race_recode_newBlack +race_recode_newHispanic + race_recode_newAmerican_Indian + race_recode_newAsian_Pacific_Islanders , 
             data=ds3, family='poisson')
 
 #Negative binomial
@@ -349,7 +368,7 @@ ggplot(data=ds3, aes(x=date, y=N_deaths)) +
   geom_line() +
   theme_classic()+
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(race_recode~agec, scales='free')+
+  facet_wrap(race_recode_new~agec, scales='free')+
       geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
 
 
@@ -366,17 +385,17 @@ ggplot(data=ds3, aes(x=date, y=rr_median)) +
   geom_hline(yintercept=1, lty=2, col='red') +
     geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
 
-  facet_wrap(race_recode~agec)
+  facet_wrap(race_recode_new~agec)
 
 ```
 
 Non-white race/ethnicity is very sparse--try to dichotomize race (white vs non-white)
 ```{r, fig.width=8, fig.height=3}
 ds3 <- p3$ts %>%
-  mutate( race_recode=as.character(race_recode),
-         race_recode=if_else(race_recode=='White', 'White', 'non_White'),
-         race_recode=as.factor(race_recode)) %>%
-    group_by( year ,month, agec, race_recode) %>%
+  mutate( race_recode_new=as.character(race_recode_new),
+         race_recode_new=if_else(race_recode_new=='White', 'White', 'non_White'),
+         race_recode_new=as.factor(race_recode_new)) %>%
+    group_by( year ,month, agec, race_recode_new) %>%
   summarize(N_deaths=sum(N_deaths)) %>%
   mutate(date=as.Date(paste(year, month, '01', sep='-')),
          qtr=as.factor(lubridate::quarter(date)),
@@ -390,17 +409,17 @@ ds3 <- p3$ts %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
 
-mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode, data=ds3))
+mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode_new, data=ds3))
 names(mod.mat3) <- gsub('-','_',names(mod.mat3))
 names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
 names(mod.mat3) <- gsub('/','_',names(mod.mat3))
-#names(mod.mat3) <- gsub('race_recode','',names(mod.mat3), fixed=T)
+#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
 
-ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode', names(mod.mat3)))] )
+ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode_new', names(mod.mat3)))] )
 
 #Poisson
 mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + agec25_44_years +
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + race_recodeWhite , 
+                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + race_recode_newWhite , 
             data=ds3, family='poisson')
 
 #Negative binomial
@@ -414,14 +433,14 @@ ggplot(data=ds3, aes(x=date, y=N_deaths)) +
   geom_line() +
   theme_classic()+
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(race_recode~agec, scales='free', nrow=2)+
+  facet_wrap(race_recode_new~agec, scales='free', nrow=2)+
       geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
 
 ggplot(data=ds3[ds3$year==2020,], aes(x=date, y=N_deaths)) +
   geom_line() +
   theme_classic()+
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(race_recode~agec, scales='free', nrow=2)+
+  facet_wrap(race_recode_new~agec, scales='free', nrow=2)+
       geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
 
 
@@ -437,7 +456,7 @@ ggplot(data=ds3, aes(x=date, y=rr_median)) +
   geom_hline(yintercept=1, lty=2, col='red') +
     geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
 
-  facet_wrap(race_recode~agec, nrow=2)
+  facet_wrap(race_recode_new~agec, nrow=2)
 ```
 
 
@@ -605,7 +624,7 @@ ggplot(d1, aes(x=Year, y=Value, color=ViewBy2)) +
 # #V_D176.V5 limit by multiple cause of death subchapter
 # mydata2 <- wonderapi::getData("Provisional Multiple Cause of Death", mylist)
 
-#Stratify by Year, month, ICD10; select MCD J13 and A40.3
+#Stratify by Year, month, ICD10; select MCD j13 and A40.3
 
 mydata1 <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 through Last Month 2023_03_17.txt', header=T, sep="\t")
 
@@ -661,7 +680,7 @@ order_trans <- read.transactions(
 
  itemFrequencyPlot(order_trans,topN=20,type="absolute")
 
- rules <- apriori(order_trans,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_J13"))
+ rules <- apriori(order_trans,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_j13"))
 
  summary(rules)
 
@@ -673,6 +692,8 @@ inspect(rules[1:100])
 
 plot(rules, method="graph", shading='lift')
 ```
+
+
 2020 only
 ```{r}
 
@@ -701,7 +722,7 @@ order_trans2020 <- read.transactions(
 
  itemFrequencyPlot(order_trans2020,topN=20,type="absolute")
 
- rules2020 <- apriori(order_trans2020,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_J13"))
+ rules2020 <- apriori(order_trans2020,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_j13"))
 
  summary(rules2020)
 
