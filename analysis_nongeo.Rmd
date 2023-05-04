@@ -342,7 +342,7 @@ ds3 <- p3$ts %>%
          cos6 = cos(2*pi*index*2/12),
          N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
          log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
+  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older') & !is.na(race_recode_new) )  
 
 mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode_new, data=ds3))
 names(mod.mat3) <- gsub('-','_',names(mod.mat3))
@@ -361,6 +361,7 @@ mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + ag
 # mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
 #                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
 #             data=ds2)
+
 
 ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
 
@@ -406,7 +407,7 @@ ds3 <- p3$ts %>%
          cos6 = cos(2*pi*index*2/12),
          N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
          log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
+  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) & !is.na(race_recode_new)  ) 
 
 
 mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode_new, data=ds3))
@@ -464,9 +465,9 @@ ggplot(data=ds3, aes(x=date, y=rr_median)) +
 Occupation--86% missing
 
 ```{r}
-unique(pneumo.deaths$occupation)
+#unique(pneumo.deaths$occupation)
 
-sum(is.na(pneumo.deaths$occupation))/nrow(pneumo.deaths)
+#sum(is.na(pneumo.deaths$occupation))/nrow(pneumo.deaths)
 ```
 
 Education--2.5% missing
