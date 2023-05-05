@@ -86,17 +86,19 @@ table(pneumo.deaths$j13,pneumo.deaths$a403 )
 
 Popsize data
 ```{r}
-#Format_US_Population()
+#Format_US_Population_wonder()
 pop1 <- readRDS('./Data/pop_interpol.rds')
 
 pop2 <- pop1 %>%
   group_by(date, agec, race_recode) %>%
   summarize(pop.interpol= sum(pop.interpol)) %>%
-  mutate(race_recode_new= factor(race_recode,levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')))
+  mutate(race_recode_new= factor(race_recode,levels=c(1,2,3,4,5), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders')),
+         year=year(date),
+         month=month(date))
 
-pop2.sex <- pop1 %>%
-  group_by(date, agec, sex) %>%
-  summarize(pop.interpol= sum(pop.interpol)) 
+# pop2.sex <- pop1 %>%
+#   group_by(date, agec, sex) %>%
+#   summarize(pop.interpol= sum(pop.interpol)) 
 ```
 
 
@@ -107,7 +109,8 @@ pop2.sex <- pop1 %>%
 
 
 ```{r}
-p1 <- death_plot_fun(year,month, j13 )
+p1 <-  death_plot_fun(year,month, j13 )
+
 p1$plot1 +
   facet_wrap(~j13) +
   ggtitle('j13 vs other pneumococcal codes')
@@ -191,7 +194,7 @@ ggplot(p3.ds, aes(x=agec, y=log(inc), group=race_recode_new,col=race_recode_new)
     theme(legend.position = 'none',
           plot.margin = margin(0.1, 2.6, 0.1, 0.1, "cm")) 
 ```
-Sex and age
+Sex and age--need to redo this to get pop size
 ```{r}
 p3 <- death_plot_fun(year,month, sex, agec) 
 
