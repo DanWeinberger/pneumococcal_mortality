@@ -1,5 +1,5 @@
 ---
-title: "Analysis of pneumococcal deaths in the US"
+title: "Analysis of rsv deaths in the US"
 output:
   pdf_document: default
   html_document: default
@@ -38,21 +38,14 @@ Parquet file created with './R/Read_mortality_tapes_nongeo_parquet.R'
 Following CDC wonder: 6 race categories - American Indian or Alaska Native (AIAN); Asian; Black or African American; More than one race; Native Hawaiian or Other Pacific Islander (NHOPI); White.
 
 ```{r}
-pneumo.deaths <-  open_dataset("/Volumes/home/HCUPdata-CC0941-MEDSPH/NCHS_mortality_public/parquet3", format = "parquet")  %>%
-  filter(grepl("j13|A39|J181|A403|B953|G001", all_icd)) %>%
+rsv.deaths <-  open_dataset("/Volumes/home/HCUPdata-CC0941-MEDSPH/NCHS_mortality_public/parquet3", format = "parquet")  %>%
+  filter(grepl("J121|J210|J205|B974", all_icd)) %>% 
  collect() %>%
-  mutate( 
-    a403 = 1*grepl('A403',all_icd),
-    j13 = 1*grepl('j13', all_icd),
-    b953 = 1*grepl('B953', all_icd),
-    g001 = 1*grepl('G001', all_icd),
-    pneumococcal =  1*((a403 + j13 + b953 + g001 )>0)  ,
-    covid = grepl('U071', all_icd),
-    j154 =1 *grepl('J154', all_icd), #streptococcal pneumonia
-    j181 =1 *grepl('J181', all_icd), #unspecified lobar pneumonia
-    streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
-                                  grepl('A409',all_icd) )>0,
-   agec = if_else(agey>=0 & agey<5,1,
+  mutate(rsv_pneumonia = if_else(grepl("J121", all_icd),1,0),
+         rsv_acute_bronchiolitis = if_else(grepl("J210", all_icd),1,0),
+         rsv_acute_bronchitis = if_else(grepl("J205", all_icd), 1, 0),
+         rsv_others = if_else(grepl("B974", all_icd), 1,0),
+         agec = if_else(agey>=0 & agey<5,1,
                    if_else(agey>=5 & agey<25,2,
                    if_else(agey>=25 & agey<45,3,
                    if_else(agey>=45 & agey<65,4,
@@ -60,7 +53,7 @@ pneumo.deaths <-  open_dataset("/Volumes/home/HCUPdata-CC0941-MEDSPH/NCHS_mortal
                    if_else(agey>=75 & agey<85,6,
                    if_else(agey>=85 & agey<120,7,
                            999)))))))
-                               ) 
+) 
 
 ```
 
