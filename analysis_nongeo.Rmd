@@ -38,11 +38,11 @@ Parquet file created with './R/Read_mortality_tapes_nongeo_parquet.R'
 Following CDC wonder: 6 race categories - American Indian or Alaska Native (AIAN); Asian; Black or African American; More than one race; Native Hawaiian or Other Pacific Islander (NHOPI); White.
 
 ```{r}
-pneumo.deaths <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = "parquet")  %>%
+pneumo.deaths <-  open_dataset("/Volumes/home/HCUPdata-CC0941-MEDSPH/NCHS_mortality_public/parquet3", format = "parquet")  %>%
   filter(grepl("j13|A39|J181|A403|B953|G001", all_icd)) %>%
  collect() %>%
   mutate( 
-   a403 = 1*grepl('A403',all_icd),
+    a403 = 1*grepl('A403',all_icd),
     j13 = 1*grepl('j13', all_icd),
     b953 = 1*grepl('B953', all_icd),
     g001 = 1*grepl('G001', all_icd),
