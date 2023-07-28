@@ -23,10 +23,10 @@
 #   return(x)
 #   })
 # 
-#  df1 <- bind_rows(all.ds) 
+#  df1 <- bind_rows(all.ds)
 #  write_parquet(as.data.frame(df1), "R:/NCHS_mortality_public/parquet2/compiled_data.parquet")
-#  
- 
+
+
 # df1 <- open_dataset("R:/NCHS_mortality_public/parquet2", format = "parquet") %>%
 #   to_duckdb() %>%
 #          mutate( all_icd = paste(icd1,icd2,
@@ -41,7 +41,7 @@
 #                                  icd19,icd20,
 #                                  icd21, sep='_'),
 #                  hisp_recode = if_else(hispanic<=199 & hispanic>=100,0,
-#                                        if_else( hispanic >=200 & hispanic <= 299,2,999
+#                                        if_else( hispanic >=200 & hispanic <= 299,1,999
 #                                        )),
 #                  race_recode= if_else(hisp_recode == 1,3,
 #                                       if_else(race %in% c('01') & hisp_recode != 1,1,
@@ -55,27 +55,27 @@
 #                                                   if_else(race_recode40 %in% c('02') & hisp_recode != 1 ,2,
 #                                                           if_else(race_recode40 %in% c('03') & hisp_recode != 1,4,
 #                                                                   if_else(race_recode40 %in% c('05','07','04','08','09','10') & hisp_recode != 1,5,                                                                                                                if_else(race_recode40 %in% c('06','11','12','13','14') & hisp_recode != 1,5, 999
-#                                                                                                                                                                                                                                                                            
+# 
 #                                                                   )))))),
 #                  race_recode_new=if_else(year<2018, race_recode,race_recode_alt ),
-#                 
+# 
 #                  age_detail_number = as.numeric(age_detail_number),
-#                  
+# 
 #                  agey = if_else(age_detail_class==2, age_detail_number/12,
 #                                 if_else(age_detail_class==4, age_detail_number/365,
 #                                         if_else(age_detail_class==5, age_detail_number/365/24,
 #                                                 if_else(age_detail_class==6, age_detail_number/365/24/60, age_detail_number
 #                                                 ))))
-#                  
+# 
 #                  ) %>%
 #   dplyr::select(year, month,age_detail_number, sex, starts_with('education'),all_icd,hisp_recode,race_recode,race_recode_alt,race_recode_new,agey) %>%
 #     collect()
-    
-#write_parquet(as.data.frame(df1), "R:/NCHS_mortality_public/parquet3/compiled_data.parquet")
+# 
+# write_parquet(as.data.frame(df1), "R:/NCHS_mortality_public/parquet3/compiled_data.parquet")
 
 
-                 
-               
+
+
 
 
 #saveRDS(df1, 'R:/NCHS_mortality_public/compiled_data.rds')
@@ -96,7 +96,7 @@ covid.codes <- c('U071','Z28310','Z28311',"Z86.16", "Z28.9","J1282","M3581") #De
 
 pneumococcal.codes <- c('A403','J13','B953','G001')
 
-#RACE: 
+#RACE:
 #1=Non-Hispanic White
 #2=Non-Hispanic- Black
 #3= Hispanic
@@ -105,7 +105,7 @@ pneumococcal.codes <- c('A403','J13','B953','G001')
 
 pneumococcal_deaths <-  open_dataset("R:/NCHS_mortality_public/parquet", format = "parquet") %>%
    filter(pneumococcal==1 | j154==1 |j181==1  ) %>%
-  collect() 
+  collect()
 
 #hist(df1$agey[df1$rsv==1 & df1$agey<1])
 
