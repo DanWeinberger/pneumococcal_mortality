@@ -300,7 +300,9 @@ ggplot(data=ds1, aes(x=date, y=rr_median)) +
     geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
  # ylim(0.5,2.2) +
   coord_cartesian(ylim = c(0.5, 2.2))+
-  geom_hline(yintercept=1, lty=2, col='red')
+  geom_hline(yintercept=1, lty=2, col='red')+    
+  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
+    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=1.5, label=c('March 2020', 'August 2021'), angle=90, col='gray')
 
 ```
 
@@ -704,7 +706,7 @@ ds1 <- mydata2 %>%
           summarize(N_deaths=sum(N_deaths)) %>%
           rename(N_deaths_wonder=N_deaths) %>%
            full_join(ds1_nchs, by='date') %>%
-    mutate(N_deaths= if_else( !is.na(N_deaths_nchs), N_deaths_nchs, N_deaths_wonder ),
+    mutate(N_deaths= if_else( !is.na(N_deaths_wonder), N_deaths_wonder, N_deaths_nchs ),
          qtr=as.factor(lubridate::quarter(date)),
          index= interval('2014-01-01', date) %/% months(1) ,
          sin12 = sin(2*pi*index/12),
@@ -731,7 +733,10 @@ ggplot(data=ds1, aes(x=date, y=N_deaths)) +
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
     annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray') +
-  ggtitle('Observed vs expected, adding CDC WONDER')
+    #geom_line(aes(x=date, y=N_deaths_nchs),col='green') +
+  #  geom_line(aes(x=date, y=N_deaths_wonder),col='blue') +
+
+  ggtitle('Observed vs expected, adding CDC WONDER (CAUTION)')
 
 
 ds1 <- ds1 %>%
@@ -740,7 +745,7 @@ ds1 <- ds1 %>%
 
 ggplot(data=ds1, aes(x=date, y=rr_median)) +
   geom_line() +
-  theme_classic()+
+    theme_classic()+
     geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
  # ylim(0.5,2.2) +
   coord_cartesian(ylim = c(0.5, 2.2))+
@@ -761,7 +766,13 @@ Market basket analysis
 
 key.vars <- pneumo.deaths %>%
     filter(year<2020) %>%
-  dplyr::select(starts_with('icd') , starts_with('age_group'),starts_with('education_recode'),starts_with('sex')) %>%
+    mutate(education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
+         education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
+         education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
+         education_recode = ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )
+         ) %>%
+   separate(all_icd, paste0('icd',1:21), sep='_', fill='right') %>%
+    dplyr::select(starts_with('icd') , starts_with('agec'),starts_with('education_recode'),starts_with('sex')) %>%
   mutate(id=row_number())
 
 
@@ -771,10 +782,10 @@ pneumo.deaths.m <- reshape2::melt(key.vars, id.vars=c('id')) %>%
  item=paste(variable, value, sep='_')) %>%
   dplyr::select(id, item)
 
-write.csv(pneumo.deaths.m,'./Raw Data/transacations.csv',row.names =F)
+write.csv(pneumo.deaths.m,'./Data/transacations.csv',row.names =F)
 
 order_trans <- read.transactions(
-        file = './Raw Data/transacations.csv',
+        file = './Data/transacations.csv',
         format = "single",
         sep = ",",
         cols=c(1,2),
@@ -784,7 +795,7 @@ order_trans <- read.transactions(
 
  itemFrequencyPlot(order_trans,topN=20,type="absolute")
 
- rules <- apriori(order_trans,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_j13"))
+ rules <- apriori(order_trans,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_J13"))
 
  summary(rules)
 
@@ -792,7 +803,7 @@ rules<-sort(rules, by="lift", decreasing=TRUE,)
 
 
 options(digits=2)
-inspect(rules[1:100])
+inspect(rules)
 
 plot(rules, method="graph", shading='lift')
 ```
