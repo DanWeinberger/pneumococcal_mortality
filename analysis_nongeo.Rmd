@@ -365,6 +365,71 @@ ggplot(data=ds2, aes(x=date, y=rr_median)) +
 
 ```
 
+race/ethnicity 
+
+```{r, fig.width=8, fig.height=6}
+
+p3 <- death_plot_fun(year,month, race_recode_new) 
+
+ds3 <- p3$ts %>%
+  mutate(date=as.Date(paste(year, month, '01', sep='-')),
+         qtr=as.factor(lubridate::quarter(date)),
+         index= interval('2014-01-01', date) %/% months(1) ,
+         sin12 = sin(2*pi*index/12),
+         cos12 = cos(2*pi*index/12),
+         sin6 = sin(2*pi*index*2/12),
+         cos6 = cos(2*pi*index*2/12),
+         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         log_offset=log(1)) %>%
+  filter(  !is.na(race_recode_new) )  
+
+
+mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + race_recode_new, data=ds3))
+names(mod.mat3) <- gsub('-','_',names(mod.mat3))
+names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
+names(mod.mat3) <- gsub('/','_',names(mod.mat3))
+#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
+
+ds3 <- cbind.data.frame(ds3,mod.mat3[,c( grep('race_recode_new', names(mod.mat3)))] )
+
+#Poisson
+mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + race_recode_newBlack +race_recode_newHispanic + race_recode_newAmerican_Indian + race_recode_newAsian_Pacific_Islanders , 
+            data=ds3, family='poisson')
+
+#Negative binomial
+# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
+#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
+#             data=ds2)
+
+
+ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
+
+ggplot(data=ds3, aes(x=date, y=N_deaths)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
+  facet_wrap(~race_recode_new, scales='free')+
+      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
+  ylim(0,NA)
+
+
+
+ds3 <- ds3 %>%
+  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
+
+
+ggplot(data=ds3, aes(x=date, y=rr_median)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
+ # ylim(0.1,5) +
+    coord_cartesian(ylim = c(0.1, 5))+
+  geom_hline(yintercept=1, lty=2, col='red') +
+    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
+  facet_wrap(~race_recode_new)
+
+```
+
 race/ethnicity and age
 
 ```{r, fig.width=8, fig.height=8}
