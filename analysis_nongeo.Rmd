@@ -279,7 +279,7 @@ mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
 
 ds1 <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='poisson'))
 
-ggplot(data=ds1, aes(x=date, y=N_deaths)) +
+p1 <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
   geom_line() +
   theme_classic()+
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2)+
@@ -287,7 +287,9 @@ ggplot(data=ds1, aes(x=date, y=N_deaths)) +
 
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
     annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')
+p1
 
+ggplotly(p1)
 
 
 ds1 <- ds1 %>%
@@ -476,6 +478,139 @@ ggplot(data=ds3, aes(x=date, y=N_deaths)) +
   facet_wrap(race_recode_new~agec, scales='free')+
       geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
 
+
+
+ds3 <- ds3 %>%
+  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
+
+
+ggplot(data=ds3, aes(x=date, y=rr_median)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
+ # ylim(0.1,5) +
+    coord_cartesian(ylim = c(0.1, 5))+
+  geom_hline(yintercept=1, lty=2, col='red') +
+    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
+  facet_wrap(race_recode_new~agec)
+
+```
+
+## Age and cause
+
+
+```{r, fig.width=10, fig.height=6}
+
+p3 <- death_plot_fun(year,month, j13, agec) 
+
+ds3 <- p3$ts %>%
+  mutate(date=as.Date(paste(year, month, '01', sep='-')),
+         qtr=as.factor(lubridate::quarter(date)),
+         index= interval('2014-01-01', date) %/% months(1) ,
+         sin12 = sin(2*pi*index/12),
+         cos12 = cos(2*pi*index/12),
+         sin6 = sin(2*pi*index*2/12),
+         cos6 = cos(2*pi*index*2/12),
+         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         log_offset=log(1)) %>%
+  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older')  )  
+
+mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +j13, data=ds3))
+names(mod.mat3) <- gsub('-','_',names(mod.mat3))
+names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
+names(mod.mat3) <- gsub('/','_',names(mod.mat3))
+#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
+
+ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode_new', names(mod.mat3)))] )
+
+#Poisson
+mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + agec25_44_years +
+                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + j13   , 
+            data=ds3, family='poisson')
+
+#Negative binomial
+# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
+#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
+#             data=ds2)
+
+
+ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
+
+p1 <-ggplot(data=ds3, aes(x=date, y=N_deaths)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
+  facet_grid(j13~agec, scales='free')+
+      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80')+
+  coord_cartesian(xlim=c(as.Date('2020-01-01'), as.Date('2021-12-01')))
+p1
+ggplotly(p1)
+
+
+ds3 <- ds3 %>%
+  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
+
+
+ggplot(data=ds3, aes(x=date, y=rr_median)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
+ # ylim(0.1,5) +
+    coord_cartesian(ylim = c(0.1, 5))+
+  geom_hline(yintercept=1, lty=2, col='red') +
+    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
+  facet_wrap(race_recode_new~agec)
+
+```
+
+
+## Age and cause
+
+
+```{r, fig.width=10, fig.height=6}
+
+p3 <- death_plot_fun(year,month, j13) 
+
+ds3 <- p3$ts %>%
+  mutate(date=as.Date(paste(year, month, '01', sep='-')),
+         qtr=as.factor(lubridate::quarter(date)),
+         index= interval('2014-01-01', date) %/% months(1) ,
+         sin12 = sin(2*pi*index/12),
+         cos12 = cos(2*pi*index/12),
+         sin6 = sin(2*pi*index*2/12),
+         cos6 = cos(2*pi*index*2/12),
+         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         log_offset=log(1)) 
+
+mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + j13, data=ds3))
+names(mod.mat3) <- gsub('-','_',names(mod.mat3))
+names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
+names(mod.mat3) <- gsub('/','_',names(mod.mat3))
+#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
+
+ds3 <- cbind.data.frame(ds3 )
+
+#Poisson
+mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + j13   , 
+            data=ds3, family='poisson')
+
+#Negative binomial
+# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
+#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
+#             data=ds2)
+
+
+ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
+
+p1 <-ggplot(data=ds3, aes(x=date, y=N_deaths)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
+  facet_grid(~j13, scales='free')+
+      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80')+
+  coord_cartesian(xlim=c(as.Date('2020-01-01'), as.Date('2021-12-01')))
+p1
+ggplotly(p1)
 
 
 ds3 <- ds3 %>%
@@ -792,7 +927,7 @@ mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
 
 ds1 <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='poisson'))
 
-ggplot(data=ds1, aes(x=date, y=N_deaths)) +
+p1 <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
   geom_line() +
   theme_classic()+
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
@@ -800,9 +935,9 @@ ggplot(data=ds1, aes(x=date, y=N_deaths)) +
     annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray') +
     #geom_line(aes(x=date, y=N_deaths_nchs),col='green') +
   #  geom_line(aes(x=date, y=N_deaths_wonder),col='blue') +
-
   ggtitle('Observed vs expected, adding CDC WONDER (CAUTION)')
-
+p1
+ggplotly(p1)
 
 ds1 <- ds1 %>%
   mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
