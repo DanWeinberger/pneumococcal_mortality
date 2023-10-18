@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = F)
 #library("groundhog")
 
 library(dplyr)
+library(stringr)
 library(lubridate)
 library(ggplot2)
 library(MASS)
@@ -23,6 +24,7 @@ library(arulesViz)
 library(directlabels)
 library(arrow)
 library(duckdb)
+library(Rtsne)
 library(cdlTools)
 library(readr)
 library(reshape2)
@@ -58,6 +60,7 @@ pneumo.deaths <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = "pa
   mutate( 
    a403 = 1*grepl('A403',all_icd),
     j13 = 1*grepl('J13', all_icd),
+    j13_prim = substr(all_icd, 1,3) =='J13',
     b953 = 1*grepl('B953', all_icd),
     g001 = 1*grepl('G001', all_icd),
     pneumococcal =  1*((a403 + j13 + b953 + g001 )>0)  ,
@@ -78,6 +81,7 @@ pneumo.deaths <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = "pa
 
 ```
 
+
 ```{r}
 
 #the file has other suspected deaths like lobar pneumonia; this filters those out
@@ -86,6 +90,11 @@ pneumo.deaths <- pneumo.deaths %>%
   filter(pneumococcal==1 )
 
 deaths2019 <- pneumo.deaths %>% filter(year==2019) %>% summarize(N=n())
+
+pneumo.deaths %>%
+  group_by(agec,year) %>%
+  filter(a403==1) %>%
+  summarize(N=n())
 
 pneumo.deaths$agec <- factor(pneumo.deaths$agec, c(1,2,3,4,5,6,7,999),c("Under 5 Years",'5-24 years', "25-44 years","45-64 years","65-74 years" ,"75-84 years","85 years and older", 'missing'))
 
@@ -96,8 +105,6 @@ pneumo.deaths$one <- 1
 
 table(pneumo.deaths$j13,pneumo.deaths$a403 )
 ```
-
-
 Popsize data
 ```{r}
 #Format_US_Population_wonder()
@@ -185,7 +192,8 @@ p4
    xlab('Age (years)')
 p4
 ```
-**to check: why is rate in Hispanic so low?
+
+
 ```{r,fig.width=unit(15,"cm"), fig.height=unit(7,"cm")}
 p3 <- death_plot_fun(year,month, race_recode_new, agec) 
 
@@ -849,7 +857,7 @@ d1 <- readRDS('./Data/abcs_data.rds') %>%
   filter(Topic=='Death Rates' & ViewBy2 !='Overall' & ViewBy=='Age')
 
 
-ggplot(d1, aes(x=Year, y=Value, color=ViewBy2)) +
+ggplot(d1, aes(x=Year, y=log(Value), color=ViewBy2)) +
          geom_line() +
          theme_classic()
 ```
@@ -857,8 +865,10 @@ ggplot(d1, aes(x=Year, y=Value, color=ViewBy2)) +
 ## Get latest data from CDC WONDER
 https://wonder.cdc.gov/controller/datarequest/D176
 group by year, month, multiple cause of death MCD J13, A40.3
+--IMPORTANT: it appears if you try to select multiple MCD codes and you stratify by MCD, it does weird things; o 1 at a time.
 ```{r}
-mydata1 <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 through Last Month 2023_07_28.txt', header=T, sep="\t")
+#Note this first one is NOT reliable because it is stratifying by multiple MCD categories
+mydata1 <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 through Last Week 2023_10_17.txt', header=T, sep="\t")
 
 mydata2 <- mydata1 %>%
   mutate(date= as.Date(paste0(substr(Month,1,3),substr(Year,1,4), '01'), '%b%Y%d'), month=lubridate::month(date),
@@ -867,19 +877,48 @@ mydata2 <- mydata1 %>%
   rename(N_deaths=Deaths, cause=Multiple.Cause.of.death.Code)
 
 
-p1 <- ggplot(mydata2, aes(x=month, y=N_deaths, group=year, color=year)) +
+
+##test1a: FINAL data; just MCD=J13
+mydata_test1a <- read.csv('./Data/Wonder/Multiple Cause of Death, 2018-2021, Single Race.txt', header=T, sep="\t")
+
+mydata_test2a <- mydata_test1a %>%
+  mutate(date= as.Date(paste0(substr(Month,1,3),substr(Year,1,4), '01'), '%b%Y%d'), month=lubridate::month(date),
+         year=as.factor(lubridate::year(date))) %>%
+  filter(Multiple.Cause.of.death.Code !='') %>%
+  rename(N_deaths_a=Deaths, cause=Multiple.Cause.of.death.Code) %>%
+  dplyr::select(date, N_deaths_a)
+
+##test1a: FINAL data; just MCD
+mydata_test1a <- read.csv('./Data/Wonder/Multiple Cause of Death, 2018-2021, Single Race.txt', header=T, sep="\t")
+
+##test1b: provisional data; just MCD=J13
+mydata_test1b <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 through Last Week_j13_2023_10_18.txt', header=T, sep="\t")
+
+mydata_test2b <- mydata_test1b %>%
+  mutate(date= as.Date(paste0(substr(Month,1,3),substr(Year,1,4), '01'), '%b%Y%d'), month=lubridate::month(date),
+         year=as.factor(lubridate::year(date))) %>%
+  filter(Multiple.Cause.of.death.Code !='') %>%
+  rename(N_deaths_b=Deaths, cause=Multiple.Cause.of.death.Code) %>%
+    dplyr::select(date, N_deaths_b) %>%
+  mutate(month=month(date),
+         year=year(date),
+         epiyr= as.factor(if_else(month>=7, year, year-1)),
+         month=factor(as.character(month), levels=c('7','8','9','10','11','12','1','2','3','4','5','6'))
+         ) 
+
+# mydata_test2b %>%
+#   dplyr::select(date, N_deaths_b) %>%
+#  left_join(mydata_test2a, by='date') %>%
+#   left_join(mydata_test2b, by='date')
+  
+p1 <- ggplot(mydata_test2b, aes(x=month, y=N_deaths_b, group=epiyr, color=epiyr)) +
   geom_line()+
   theme_classic()+
-  ylim(0, NA) +
-  facet_wrap(~cause)
-  
+  ylim(0, NA) 
+
 p1
 
 ggplotly(p1)
-
-
-
-
 ```
 
 Fit model to 2014-2019 data, extrapolate to 2020 and beyond
@@ -888,9 +927,15 @@ Fit model to 2014-2019 data, extrapolate to 2020 and beyond
 ##NCHS data:
 p1 <-  death_plot_fun(year,month, j13 )
 
-ds1_nchs <- p1$ts %>%
+ds1_nchs <- pneumo.deaths %>%
+  filter(j13==1) %>%
+  group_by(year, month) %>%
+    group_by( year, month ) %>%
+    summarize(N_deaths=n()) %>%
+    ungroup() %>%
+    mutate(year=as.factor(year),month=as.numeric(as.character(month))) %>%
+    tidyr::complete( year, month, fill=list(N_deaths=0) ) %>%
   mutate(date=as.Date(paste(year, month, '01', sep='-'))) %>%
-  #filter(j13==1) %>%
   select(N_deaths, date) %>%
   rename(N_deaths_nchs=N_deaths) %>%
   group_by(date) %>%
@@ -898,13 +943,8 @@ ds1_nchs <- p1$ts %>%
 
 
 #WONDER DATA
-ds1 <- mydata2 %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-'))) %>%
-          # filter(cause=='J13') %>%
-           select(date, N_deaths ) %>%
-          group_by(date) %>%
-          summarize(N_deaths=sum(N_deaths)) %>%
-          rename(N_deaths_wonder=N_deaths) %>%
+ds1 <- mydata_test2b %>%
+           rename(N_deaths_wonder=N_deaths_b) %>%
            full_join(ds1_nchs, by='date') %>%
     mutate(N_deaths= if_else( !is.na(N_deaths_wonder), N_deaths_wonder, N_deaths_nchs ),
          qtr=as.factor(lubridate::quarter(date)),
@@ -916,6 +956,12 @@ ds1 <- mydata2 %>%
          year=as.factor(year(date)),
          N_deaths_pre= if_else(date>='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) 
+
+ggplot(ds1, aes(x=date, y=N_deaths_wonder/N_deaths_nchs)) +
+  geom_line()+
+  #geom_line(aes(x=date, y=N_deaths_nchs), col='red')+
+  theme_classic()+
+  ggtitle('Comparison of final and provisional NCHS data')
 
 #Poisson
 mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
@@ -960,6 +1006,115 @@ mydata1_race <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 t
 
 ```
 
+## ABCs case data
+
+```{r}
+abc1 <- read.csv('https://data.cdc.gov/api/views/qvzb-qs6p/rows.csv?accessType=DOWNLOAD') %>%
+  rename(agegrp=Age.Group..years.,
+         st=IPD.Serotype,
+         N_IPD=Frequency.Count) %>%
+  group_by(agegrp, Year) %>%
+  summarize(N_IPD= sum(N_IPD))
+
+#saveRDS(abc1,'./Data/ABC_2016_2021.rds')
+
+
+```
+
+## Factors associated with pandmeic period
+## Binary ICD variables
+
+Create a vector with each of the unique ICD-10 codes (1827 total)
+```{r}
+all_icd2 <- unique(unlist(str_split(paste(pneumo.deaths$all_icd, collapse='_'),'_')))
+
+pneumococcal_deaths <- pneumo.deaths %>%
+  filter(pneumococcal==1) %>%
+  mutate(date = as.Date(paste(year,month,'01', sep='-')))
+
+big.mat_full <- pbsapply(all_icd2, function(X) var1 = grepl(X, pneumococcal_deaths$all_icd) , simplify='array')
+
+big.mat <- big.mat_full %>% 
+  as.data.frame() %>% 
+  distinct() %>%
+  as.matrix() 
+
+big.mat.t <- t(big.mat) %>% 
+  as.data.frame() %>% 
+  distinct() %>%
+  as.matrix() 
+
+#tsne_icd <- Rtsne(big.mat)
+
+#tsne_icd2 <- Rtsne(big.mat.t) #plots the ICD codes
+#try again, but remove outcome codes from matrix
+big.mat2a <- big.mat
+row.names(big.mat2a) <- 1:nrow(big.mat)
+   
+#B953 not found
+big.mat2b <- big.mat2a %>%
+  as.data.frame() %>%
+  dplyr::select(-J13,-A403, -J181, -G001) %>%
+  distinct() %>%
+  as.matrix()
+
+ids.kept <- row.names(big.mat2b)
+
+tsne_icd3 <- Rtsne(big.mat2b)
+
+label.mat <- big.mat2a %>%
+  as.data.frame() %>%
+  filter(row.names(.) %in% ids.kept) 
+
+# Conversion of matrix to dataframe
+tsne_plot <- data.frame(x = tsne_icd3$Y[,1],
+                        y = tsne_icd3$Y[,2])
+ 
+# Plotting the plot using ggplot() function
+p1 <- ggplot2::ggplot(tsne_plot)+ 
+  geom_point(aes(x=x,y=y, text=))
+plotly::ggplotly(p1)
+
+ggplot2::ggplot(tsne_plot)+ 
+  geom_point(aes(x=x,y=y, color=label.mat[,'J13']))
+
+ggplot2::ggplot(tsne_plot)+ 
+  geom_point(aes(x=x,y=y, color=label.mat[,'F102'])) 
+
+
+sort(-apply(big.mat,2,mean))[1:20]
+
+#now can do logistic regression--what icd codes predict whether the person has A40.3 vs J13 vs J18.1
+```
+
+Ridge Regression: are there codes associated with pandemic period, or other characteristics?
+```{r}
+library(glmnet)
+mod.ds <-  big.mat_full %>%
+  as.data.frame() %>%
+  mutate(Y = if_else(pneumococcal_deaths$date >= '2020-03-01',1,0))
+
+X <- mod.ds %>% 
+  dplyr::select(-Y) %>%
+  as.matrix()
+
+Y= mod.ds %>% 
+  dplyr::select(Y) %>%
+  pull(Y)
+
+set.seed(123) 
+cv.lasso <- cv.glmnet(x=X, y=Y, alpha = 1, family = "binomial")
+
+# Fit the final model on the training data
+mod1 <- glmnet(x=X, y=Y, alpha = 1, family = "binomial", lambda = cv.lasso$lambda.min)
+
+coefs <- coef(mod1)[,1]
+
+sort(coefs, decreasing=T)[1:100]
+sort(coefs, decreasing=F)[1:100]
+
+
+```
 
 Market basket analysis
 ```{r}
@@ -1052,9 +1207,6 @@ plot(rules2020, method="graph", shading='lift')
 ```
 
 
-```{r}
-
-```
 
 
 
