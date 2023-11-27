@@ -206,11 +206,13 @@ p3.ds <- merge(p3$ts, pop2, by=c('agec','race_recode_new', 'date', 'year')) %>%
   group_by(race_recode_new, agec) %>%
   summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
   ungroup() %>%
-  mutate(inc=N_deaths/pop*100000 , race_recode_new=factor(race_recode_new)) %>%
+  mutate(inc=N_deaths/pop*100000 ,
+         race_recode_new=as.character(race_recode_new)) %>%
   filter(!is.na(race_recode_new)) %>%
   mutate( race_short = if_else(race_recode_new=='American Indian', 'Amer. Ind.',
                                if_else( race_recode_new=='Asian/Pacific Islanders', 'Asian/PI',
-                                      race_recode_new)))
+                                      race_recode_new)),
+           race_recode_new=factor(race_recode_new))
   
 
 ggplot(p3.ds, aes(x=agec, y=log(inc), group=race_short,col=race_short, linetype=race_short)) +
@@ -846,20 +848,72 @@ ggplot(data=ds5, aes(x=date, y=rr_median)) +
   facet_wrap(education_recode~agec, nrow=2)
 ```
 
-## ABCs deaths from BactFacts
-Only through 2019
+## ABCs deaths from BactFacts (without serotype)
+through 2021
 
-```{r}
+```{r, fig.width=6, fig.height=3}
 # d1 <-read.csv('https://data.cdc.gov/api/views/en3s-hzsr/rows.csv?accessType=DOWNLOAD')
 # saveRDS(d1, './Data/abcs_data.rds')
 
-d1 <- readRDS('./Data/abcs_data.rds') %>%
-  filter(Topic=='Death Rates' & ViewBy2 !='Overall' & ViewBy=='Age')
+death_abc <- readRDS('./Data/abcs_data.rds') %>%
+  filter(Topic=='Death Rates' & ViewBy2 !='Overall' & ViewBy=='Age')%>%
+  rename(agec=ViewBy2,death_rate=Value)
+
+case_abc <- readRDS('./Data/abcs_data.rds') %>%
+  filter(Topic=='Case Rates' & ViewBy2 !='Overall' & ViewBy=='Age') %>%
+  rename(agec=ViewBy2,case_rate=Value)
+
+cfr <- case_abc %>%
+  left_join(death_abc, by=c('Year','agec')) %>%
+  mutate(cfr= death_rate/case_rate)
 
 
-ggplot(d1, aes(x=Year, y=log(Value), color=ViewBy2)) +
+death_abc %>%
+  filter(Year>=2014) %>%
+ggplot( aes(x=Year, y=log(death_rate), color=agec)) +
          geom_line() +
-         theme_classic()
+  geom_point()+
+         theme_classic() +
+  xlim(2014, 2022.5)+
+  geom_vline(xintercept=2019.5, lty=3) +
+    geom_dl(aes(label = agec), method = "last.qp", cex=3) +
+    # Remove legend & adjust margins to give more space for labels
+    # Remember, the margins are t-r-b-l
+    theme(legend.position = 'none',
+          plot.margin = margin(0.1, 3, 0.1, 0.1, "cm")) +
+    coord_cartesian(clip = 'off') 
+
+case_abc %>%
+  filter(Year>=2014) %>%
+ggplot( aes(x=Year, y=log(case_rate), color=agec)) +
+         geom_line() +
+  geom_point()+
+         theme_classic() +
+  xlim(2014, 2022.5)+
+  geom_vline(xintercept=2019.5, lty=3) +
+    geom_dl(aes(label = agec), method = "last.qp", cex=3) +
+    # Remove legend & adjust margins to give more space for labels
+    # Remember, the margins are t-r-b-l
+    theme(legend.position = 'none',
+          plot.margin = margin(0.1, 3, 0.1, 0.1, "cm")) +
+    coord_cartesian(clip = 'off') 
+
+
+cfr %>%
+  filter(Year>=2014) %>%
+ggplot( aes(x=Year, y=(cfr), color=agec)) +
+         geom_line() +
+  geom_point()+
+         theme_classic() +
+  xlim(2014, 2022.5)+
+  geom_vline(xintercept=2019.5, lty=3) +
+    geom_dl(aes(label = agec), method = "last.qp", cex=3) +
+    # Remove legend & adjust margins to give more space for labels
+    # Remember, the margins are t-r-b-l
+    theme(legend.position = 'none',
+          plot.margin = margin(0.1, 3, 0.1, 0.1, "cm")) +
+    coord_cartesian(clip = 'off') 
+
 ```
 
 ## Get latest data from CDC WONDER
@@ -1006,7 +1060,7 @@ mydata1_race <- read.csv('./Data/Wonder/Provisional Mortality Statistics, 2018 t
 
 ```
 
-## ABCs case data
+## ABCs case data, with serotype (no denominator)
 
 ```{r}
 abc1 <- read.csv('https://data.cdc.gov/api/views/qvzb-qs6p/rows.csv?accessType=DOWNLOAD') %>%
