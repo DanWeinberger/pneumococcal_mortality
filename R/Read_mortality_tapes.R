@@ -7,6 +7,7 @@ library(reshape2)
 library(tidyr)
 library(ggplot2)
 library(cdlTools)
+library(parquetize)
 
 #the geographic resolution missing from the public data
 
@@ -33,6 +34,9 @@ all.ds <- lapply(all.ds, function(x){
 
  df1 <- bind_rows(all.ds)
 saveRDS(df1, './CONFIDENTIAL/compiled_data.rds')
+
+#rds_to_parquet('./CONFIDENTIAL/compiled_data.rds', "R:/NCHS_mortality_GEO/parquet", partition = "no")
+
 
 df1 <- readRDS('./CONFIDENTIAL/compiled_data.rds')
 
