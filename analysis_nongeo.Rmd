@@ -1258,7 +1258,32 @@ inspect(rules[1:100])
 
 plot(rules2020, method="graph", shading='lift')
 ```
+
+
+```{r, eval=F}
+age_deaths <-  open_dataset("Y:/NCHS_mortality_GEO", format = "parquet")  %>%
+mutate(age_detail_number = as.numeric(age_detail_number),
+
+         agey= if_else(age_detail_class==1, age_detail_number,
+              if_else(    age_detail_class==2,age_detail_number/12,
+         if_else(age_detail_class==4,age_detail_number/365,
+         if_else(age_detail_class==5,age_detail_number/365/24,
+         if_else(age_detail_class==6,age_detail_number/365/24/60,99999))))), 
+  agec = if_else(agey>=0 & agey<5,1,
+                   if_else(agey>=5 & agey<25,2,
+                   if_else(agey>=25 & agey<45,3,
+                   if_else(agey>=45 & agey<65,4,
+                   if_else(agey>=65 & agey<75,5,
+                   if_else(agey>=75 & agey<85,6,
+                   if_else(agey>=85 & agey<120,7,
+                           999))))) ))
+) %>%
+  group_by(agec, year, month) %>%
+  summarize(N_deaths=n()) %>% 
+collect()
+                                
 ```
+
 
 
 
