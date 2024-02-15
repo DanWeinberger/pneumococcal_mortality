@@ -1,6 +1,6 @@
 
 death_plot_fun <- function(...){
-  plot.ds1 <- pneumo.deaths %>% 
+  plot.ds1 <- pneumo.deaths.adult %>% 
     group_by( ... ) %>%
     summarize(N_deaths=n()) %>%
     ungroup() %>%
@@ -8,7 +8,7 @@ death_plot_fun <- function(...){
     tidyr::complete( ..., fill=list(N_deaths=0) ) 
     
   
-  plot.cols <- c(rep('gray',6),'blue', 'red')
+  plot.cols <- c(rep('gray',6),'#1b9e77', '#d95f02')
   
   p1 <- ggplot(plot.ds1, aes(x=month, y=N_deaths, group=year, col=year)) +
     geom_line() +
