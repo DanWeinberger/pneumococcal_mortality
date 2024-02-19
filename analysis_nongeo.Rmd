@@ -1133,13 +1133,36 @@ abc1 <- read.csv('https://data.cdc.gov/api/views/qvzb-qs6p/rows.csv?accessType=D
 
 Create a vector with each of the unique ICD-10 codes (1827 total)
 ```{r}
-all_icd2 <- unique(unlist(str_split(paste(pneumo.deaths$all_icd, collapse='_'),'_')))
 
 pneumococcal_deaths <- pneumo.deaths %>%
   filter(pneumococcal==1) %>%
-  mutate(date = as.Date(paste(year,month,'01', sep='-')))
+  mutate(date = as.Date(paste(year,month,'01', sep='-')),
+         education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
+         education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
+         education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
+         education_recode = as.factor(ifelse(education_hs==1,1, ifelse(education_college==1,2,99) ))
+        ) %>%
+  separate(all_icd, paste0('icd',1:21), sep='_', fill='right') %>%
+      dplyr::select(starts_with('icd') , starts_with('agec'),starts_with('education_recode'),starts_with('sex'), race_recode_new,date) %>%
+    mutate(id=row_number()) %>%
+    mutate(across(starts_with("icd"), ~substr(.,1,3))) %>%
+   mutate(all_icd = paste(icd1,icd2,
+                                 icd3,icd4,
+                                 icd5,icd6,
+                                 icd7,icd8,
+                                 icd9,icd10,
+                                 icd11,icd12,
+                                 icd13,icd14,
+                                 icd15,icd16,
+                                 icd17,icd18,
+                                 icd19,icd20,
+                                 icd21, sep='_')
+   ) %>%
+  filter(!is.na(agec) & !is.na(sex) & !is.na(education_recode) & !is.na(race_recode_new))
 
-big.mat_full <- pbsapply(all_icd2, function(X) var1 = grepl(X, pneumococcal_deaths$all_icd) , simplify='array')
+all_icd.3digit2 <- unique(unlist(str_split(paste(pneumococcal_deaths$all_icd, collapse='_'),'_')))
+
+big.mat_full <- pbsapply(all_icd.3digit2, function(X) var1 = grepl(X, pneumococcal_deaths$all_icd) , simplify='array')
 
 big.mat <- big.mat_full %>% 
   as.data.frame() %>% 
@@ -1197,13 +1220,19 @@ sort(-apply(big.mat,2,mean))[1:20]
 Ridge Regression: are there codes associated with pandemic period, or other characteristics?
 ```{r}
 library(glmnet)
+
 mod.ds <-  big.mat_full %>%
   as.data.frame() %>%
   mutate(Y = if_else(pneumococcal_deaths$date >= '2020-03-01',1,0))
 
+x.covar <-   model.matrix( ~agec + sex +education_recode + race_recode_new  ,data=pneumococcal_deaths) 
+x.covar <- x.covar[,-1]
+
+
 X <- mod.ds %>% 
   dplyr::select(-Y) %>%
-  as.matrix()
+  as.matrix() %>%
+  cbind(.,x.covar)
 
 Y= mod.ds %>% 
   dplyr::select(Y) %>%
@@ -1219,6 +1248,44 @@ coefs <- coef(mod1)[,1]
 
 sort(coefs, decreasing=T)[1:100]
 sort(coefs, decreasing=F)[1:100]
+
+# download.file("https://github.com/cran/icd.data/raw/master/data/icd10_sub_chapters.RData", "icd10")
+# load("icd10")
+# saveRDS(icd10_sub_chapters,'./Data/icd10_subchaper.rds')
+icd10_sub_chapters <- readRDS('./Data/icd10_subchaper.rds')
+icd10_sub_chapters[["Human Immunodeficiency Virus [HIV] Disease"]]['end'] <- 'B24'
+icd10_sub_chapters[["Diabetes Mellitus"]]['end'] <- 'E14'
+icd10_sub_chapters[["Event Of Undetermined Intent"]]['end'] <- 'Y34'
+
+
+covid <- list('covid'=c('start'='U07', 'end'='U07'))
+
+icd10_sub_chapters <- c(icd10_sub_chapters, covid)
+icd_mapping <- lapply(names(coefs), function(X){
+       
+    code.check <- sapply(1:length(icd10_sub_chapters), function(Y)
+     {
+           code_present <- X >=icd10_sub_chapters[[Y]][1] &  X <=icd10_sub_chapters[[Y]][2]
+           code_name <- names(icd10_sub_chapters)[Y]
+           c('icd'=X,'code_present'=code_present,'code_name'=code_name)
+     })
+   code.check <- as.data.frame(t(code.check))
+  }
+) %>%
+  bind_rows() %>%
+  filter(code_present.start==TRUE)
+
+coefs.df <- cbind.data.frame('var'=names(coefs),'coef'=coefs) %>%
+  left_join(icd_mapping, by=c('var'='icd')) %>%
+  filter(var !='(Intercept)' & var !='NA') %>%
+  arrange(coef) %>%
+  mutate( code_name = if_else(is.na(code_name),var,code_name),
+          coef=round(coef,2)) %>%
+  dplyr::select(coef ,var,code_name ) %>%
+  filter(abs(coef)>0.1)
+
+write.csv(coefs.df,'./Data/ridge_regression.csv')
+View(coefs.df)
 
 
 ```
@@ -1245,7 +1312,9 @@ pneumo.deaths.m <- reshape2::melt(key.vars, id.vars=c('id')) %>%
   dplyr::select(id, item)
 
 write.csv(pneumo.deaths.m,'./Data/transacations.csv',row.names =F)
+```
 
+```{r}
 order_trans <- read.transactions(
         file = './Data/transacations.csv',
         format = "single",
@@ -1257,27 +1326,40 @@ order_trans <- read.transactions(
 
  itemFrequencyPlot(order_trans,topN=20,type="absolute")
 
- rules <- apriori(order_trans,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_J13"))
+ rules <- apriori(order_trans,parameter=list(supp=0.01,conf = 0.5),appearance = list(default="lhs",rhs="icd_J13"))
 
  summary(rules)
 
-rules<-sort(rules, by="lift", decreasing=TRUE,)
+rules1<-sort(rules, by="lift", decreasing=TRUE)
 
 
 options(digits=2)
-inspect(rules)
+inspect(rules1[1:100])
+inspectDT(rules1[1:1000])
 
-plot(rules, method="graph", shading='lift')
+
+rules2<-sort(rules, by="support", decreasing=TRUE)
+inspect(rules2[1:100])
+
+
+plot(rules1, method="graph", shading='lift', limit=100)
 ```
 
 
 2020 only
 ```{r}
 
-key.vars2020 <- pneumo.deaths %>%
-  filter(year==2020) %>%
-  dplyr::select(starts_with('icd') , starts_with('age_group'),starts_with('education_recode'),starts_with('sex')) %>%
-  mutate(id=row_number())
+key.vars2020 <-  pneumo.deaths %>%
+    filter(year==2020) %>%
+    mutate(education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
+         education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
+         education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
+         education_recode = ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )
+         ) %>%
+   separate(all_icd, paste0('icd',1:21), sep='_', fill='right') %>%
+    dplyr::select(starts_with('icd') , starts_with('agec'),starts_with('education_recode'),starts_with('sex')) %>%
+  mutate(id=row_number()) %>%
+  mutate(across(starts_with("icd"), ~substr(.,1,3)))
 
 
 pneumo.deaths.m2020 <- reshape2::melt(key.vars2020, id.vars=c('id')) %>%
@@ -1286,10 +1368,10 @@ pneumo.deaths.m2020 <- reshape2::melt(key.vars2020, id.vars=c('id')) %>%
  item=paste(variable, value, sep='_')) %>%
   dplyr::select(id, item)
 
-write.csv(pneumo.deaths.m2020,'./Raw Data/transacations2020.csv',row.names =F)
+write.csv(pneumo.deaths.m2020,'./Data/transacations2020.csv',row.names =F)
 
 order_trans2020 <- read.transactions(
-        file = './Raw Data/transacations2020.csv',
+        file = './Data/transacations2020.csv',
         format = "single",
         sep = ",",
         cols=c(1,2),
@@ -1299,17 +1381,17 @@ order_trans2020 <- read.transactions(
 
  itemFrequencyPlot(order_trans2020,topN=20,type="absolute")
 
- rules2020 <- apriori(order_trans2020,parameter=list(supp=0.001,conf = 0.5),appearance = list(default="lhs",rhs="icd_j13"))
+ rules2020 <- apriori(order_trans2020,parameter=list(supp=0.01,conf = 0.5),appearance = list(default="lhs",rhs="icd_J13"))
 
  summary(rules2020)
 
-rules<-sort(rules2020, by="lift", decreasing=TRUE,)
+rules<-sort(rules2020, by="lift", decreasing=TRUE)
 
 
 options(digits=2)
 inspect(rules[1:100])
 
-plot(rules2020, method="graph", shading='lift')
+plot(rules2020, method="graph", shading='lift', limit=100)
 ```
 
 
