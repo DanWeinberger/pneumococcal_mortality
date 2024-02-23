@@ -1132,6 +1132,8 @@ abc1 <- read.csv('https://data.cdc.gov/api/views/qvzb-qs6p/rows.csv?accessType=D
 ## Binary ICD variables
 
 Create a vector with each of the unique ICD-10 codes (1827 total)
+**or instead break into CCSR categories https://rdrr.io/github/HunterRatliff1/hcup/man/ccsr_dx.html **
+
 ```{r}
 
 pneumococcal_deaths <- pneumo.deaths %>%
@@ -1141,7 +1143,7 @@ pneumococcal_deaths <- pneumo.deaths %>%
          education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
          education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
          education_recode = as.factor(ifelse(education_hs==1,1, ifelse(education_college==1,2,99) ))
-        ) %>%
+          ) %>%
   separate(all_icd, paste0('icd',1:21), sep='_', fill='right') %>%
       dplyr::select(starts_with('icd') , starts_with('agec'),starts_with('education_recode'),starts_with('sex'), race_recode_new,date) %>%
     mutate(id=row_number()) %>%
@@ -1287,6 +1289,89 @@ coefs.df <- cbind.data.frame('var'=names(coefs),'coef'=coefs) %>%
 write.csv(coefs.df,'./Data/ridge_regression.csv')
 View(coefs.df)
 
+
+```
+
+CCSR instead!
+```{r}
+#install.packages("remotes")
+#remotes::install_github("HunterRatliff1/hcup")
+library(hcup)
+
+pneumococcal_deaths <- pneumo.deaths %>%
+  filter(pneumococcal==1) %>%
+  mutate(date = as.Date(paste(year,month,'01', sep='-')),
+         education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
+         education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
+         education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
+         education_recode = as.factor(ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )),
+         ID=row_number()
+        ) %>%
+  separate(all_icd, paste0('icd',1:21), sep='_', fill='right') %>%
+  dplyr::select(ID, date,year, month, sex,education_recode, agec, race_recode_new, starts_with('icd') ) %>%
+  reshape2::melt(., id.vars=c('ID','date','year', 'month', 'sex','education_recode', 'agec', 'race_recode_new')) %>%
+filter(!is.na(value))
+
+
+test <- ccsr_dx(pneumococcal_deaths$value)
+test2 <- lapply(test, function(X) paste(X, collapse='_')) %>% unlist()
+
+pneumococcal_deaths2 <- pneumococcal_deaths %>%
+  mutate(ccsr = test2 ) %>%
+  separate(ccsr, paste0('ccsrcat',1:3), sep='_', fill='right') %>%
+    dplyr::select(ID, year,date, month, sex,education_recode, agec, race_recode_new, starts_with('ccsrcat') ) %>%
+  reshape2::melt(., id.vars=c('ID','year','date', 'month', 'sex','education_recode', 'agec', 'race_recode_new')) %>%
+  filter(!is.na(value) & value !='NA') %>%
+  dplyr::select(-variable) %>%
+  rename(ccsr=value) %>%
+  distinct() %>%
+  group_by(ID, year,date, month, sex,education_recode, agec, race_recode_new) %>%
+  summarize( ccsr = paste(ccsr, collapse='_')) %>%
+  filter(!is.na(sex) & !is.na(education_recode) & !is.na(agec) & !is.na(race_recode_new))
+
+all_icd.3digit2 <- unique(unlist(str_split(paste(pneumococcal_deaths2$ccsr, collapse='_'),'_')))
+
+big.mat_full <- pbsapply(all_ccsr, function(X) var1 = grepl(X, pneumococcal_deaths2$ccsr) , simplify='array')
+
+
+
+library(glmnet)
+
+mod.ds <-  big.mat_full %>%
+  as.data.frame() %>%
+  mutate(Y = if_else(pneumococcal_deaths2$date >= '2020-03-01',1,0))
+
+x.covar <-   model.matrix( ~agec + sex +education_recode + race_recode_new  ,data=pneumococcal_deaths2) 
+x.covar <- x.covar[,-1]
+
+
+X <- mod.ds %>% 
+  dplyr::select(-Y) %>%
+  as.matrix() %>%
+  cbind(.,x.covar)
+
+crcs_freq <- apply(X,2, sum)
+X_filt <- X[,crcs_freq>=100]
+crcs_freq_filt <- apply(X_filt,2, sum)
+
+crcs_freq_filt_df <- cbind.data.frame('crcs'=names(crcs_freq_filt), crcs_freq_filt)
+
+
+Y= mod.ds %>% 
+  dplyr::select(Y) %>%
+  pull(Y)
+
+set.seed(123) 
+cv.lasso <- cv.glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial")
+
+# Fit the final model on the training data
+mod1 <- glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial", lambda = cv.lasso$lambda.min)
+
+coefs <- coef(mod1)[,1]
+
+coef.df <- cbind.data.frame('coefs'=coefs, 'crcs_exp'=hcup::explain_ccsr(names(coefs)), 'crcs'=names(coefs) ) %>%
+  left_join(crcs_freq_filt_df, by='crcs') %>%
+  arrange(-coefs)
 
 ```
 
