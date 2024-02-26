@@ -1373,6 +1373,10 @@ coef.df <- cbind.data.frame('coefs'=coefs, 'crcs_exp'=hcup::explain_ccsr(names(c
   left_join(crcs_freq_filt_df, by='crcs') %>%
   arrange(-coefs)
 
+
+mod2 <- glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial")
+
+
 ```
 
 Market basket analysis
