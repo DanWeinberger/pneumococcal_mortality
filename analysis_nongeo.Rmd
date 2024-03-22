@@ -67,8 +67,9 @@ pneumo.deaths.in <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = 
     pneumococcal =  1*((a403 + j13 + b953 + g001 )>0)  ,
     covid = grepl('U071', all_icd),
     j154 =1 *grepl('J154', all_icd), #streptococcal pneumonia
-    j181 =1 *grepl('J181', all_icd), #unspecified lobar pneumonia
-    j12_j18 = max(grepl('J12', all_icd),grepl('J13', all_icd),grepl('J14', all_icd),grepl('J15', all_icd),grepl('J16', all_icd),grepl('J17', all_icd),grepl('J18', all_icd)),
+    j181 =1 *grepl('J181', all_icd) , #unspecified lobar pneumonia
+    j12_j18 = grepl('J12', all_icd) + grepl('J13', all_icd) + grepl('J14', all_icd) + grepl('J15', all_icd) + grepl('J16', all_icd) + grepl('J17', all_icd) + grepl('J18', all_icd),
+   j12_j18 = if_else(j12_j18>1,1,j12_j18),
     streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
                                   grepl('A409',all_icd) )>0,
    pneumococcal_pneum = if_else( (j13==1 | (pneumococcal==1 & j12_j18==1)) ,1,0 ),
@@ -86,6 +87,7 @@ pneumo.deaths.in <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = 
 
 #why do all pneumo deaths have a J12-J18?
 table( pneumo.deaths.in$j12_j18)
+table( pneumo.deaths.in$pneumococcal_pneum)
 
 ```
 
@@ -98,7 +100,7 @@ deaths2019 <- pneumo.deaths.in %>% filter(year==2019) %>% summarize(N=n())
 
 pneumo.deaths.in %>%
   group_by(agec,year) %>%
-  filter(a403==1) %>%
+  filter(a403==1 & !is.na(agec)) %>%
   summarize(N=n())
 
 pneumo.deaths <- pneumo.deaths.in
@@ -110,7 +112,7 @@ pneumo.deaths$race_recode_new <- factor(pneumo.deaths$race_recode_new, levels=c(
 pneumo.deaths$one <- 1
 
 pneumo.deaths.adult <- pneumo.deaths %>%
-  filter(agey>=25) %>%
+  filter(agey>=25 & !is.na(agec)) %>%
   mutate(agec=factor(agec))
 
 table(pneumo.deaths$j13,pneumo.deaths$a403 )
@@ -130,7 +132,7 @@ pop2 <- pop1 %>%
 
 # pop2.sex <- pop1 %>%
 #   group_by(date, agec, sex) %>%
-#   summarize(pop.interpol= sum(pop.interpol)) 
+#   summarize(pop.interpol= sum(pop.interpol))
 ```
 
 
@@ -173,8 +175,8 @@ p2$plot1 + facet_wrap(~agec, scales='free', nrow=1)
 
 By syndrome and age (note to check--if someone has J12-J18 + other pneumo code, it should count as pneumococcal pneumonia)
 ```{r, fig.height=5, fig.width=12}
-p2a <- death_plot_fun(year,month, agec, j13) 
-p2a$plot1 + facet_grid(j13~agec, scales='free')
+p2a <- death_plot_fun(year,month, agec, pneumococcal_pneum) 
+p2a$plot1 + facet_grid(pneumococcal_pneum~agec, scales='free')
 ```
 
 
@@ -280,34 +282,34 @@ ggplot(p3.ds, aes(x=agec, y=log(inc), group=race_short,col=race_short, linetype=
 ```
 Sex and age--need to redo this to get pop size
 ```{r}
-p3 <- death_plot_fun(year,month, sex, agec) 
-
-p3$ts$date <- as.Date(paste(p3$ts$year, p3$ts$month, '01',sep='-') , '%Y-%m-%d' )
-
-p3$ts$year <- as.numeric(as.character(p3$ts$year))
-
-p3.ds <- merge(p3$ts, pop2.sex, by=c('agec','sex', 'date', 'year')) %>%
-  filter(year<2020) %>% #Pre-padnemic rates
-  group_by(sex, agec) %>%
-  summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
-  ungroup() %>%
-  mutate(inc=N_deaths/pop*100000 , sex=factor(sex)) 
-
-ggplot(p3.ds, aes(x=agec, y=log(inc), group=sex,col=sex)) +
-  geom_line()+
-  theme_classic()+
-  ggtitle('Rate of pneumococcal death by age and sex')+
-   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
-  ylab('log(Deaths/100,000)') +
-  xlab('')
-
-ggplot(p3.ds, aes(x=agec, y=(inc), group=sex,col=sex)) +
-  geom_line()+
-  theme_classic()+
-  ggtitle('Rate of pneumococcal death by age and sex')+
-   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
-  ylab('(Deaths/100,000)') +
-  xlab('')
+# p3 <- death_plot_fun(year,month, sex, agec) 
+# 
+# p3$ts$date <- as.Date(paste(p3$ts$year, p3$ts$month, '01',sep='-') , '%Y-%m-%d' )
+# 
+# p3$ts$year <- as.numeric(as.character(p3$ts$year))
+# 
+# p3.ds <- merge(p3$ts, pop2.sex, by=c('agec','sex', 'date', 'year')) %>%
+#   filter(year<2020) %>% #Pre-padnemic rates
+#   group_by(sex, agec) %>%
+#   summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
+#   ungroup() %>%
+#   mutate(inc=N_deaths/pop*100000 , sex=factor(sex)) 
+# 
+# ggplot(p3.ds, aes(x=agec, y=log(inc), group=sex,col=sex)) +
+#   geom_line()+
+#   theme_classic()+
+#   ggtitle('Rate of pneumococcal death by age and sex')+
+#    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+#   ylab('log(Deaths/100,000)') +
+#   xlab('')
+# 
+# ggplot(p3.ds, aes(x=agec, y=(inc), group=sex,col=sex)) +
+#   geom_line()+
+#   theme_classic()+
+#   ggtitle('Rate of pneumococcal death by age and sex')+
+#    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+#   ylab('(Deaths/100,000)') +
+#   xlab('')
 ```
 
 
@@ -344,7 +346,8 @@ p1 <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
     geom_line(aes(x=date, y=pred_median), col='red', lty=2, alpha=0.2)+
 
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')
+    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
+  ylab('N deaths')
 p1
 
 ggplotly(p1)
@@ -403,7 +406,7 @@ ggplot(data=ds2, aes(x=date, y=N_deaths)) +
   theme_classic()+
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
   facet_wrap(~agec)+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
+  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') 
 
 
 
@@ -419,7 +422,7 @@ ggplot(data=ds2, aes(x=date, y=rr_median)) +
     coord_cartesian(ylim = c(0.1, 5))+
 
   geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
+  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
 
   facet_wrap(~agec)
 
@@ -582,7 +585,7 @@ names(mod.mat3) <- gsub('/','_',names(mod.mat3))
 ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode_new', names(mod.mat3)))] )
 
 #Poisson
-mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + agec25_44_years +
+mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + 
                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + j13   , 
             data=ds3, family='poisson')
 
