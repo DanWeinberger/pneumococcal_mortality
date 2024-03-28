@@ -1316,7 +1316,9 @@ pneumococcal_deaths <- pneumo.deaths %>%
 filter(!is.na(value))
 
 
-test <- ccsr_dx(pneumococcal_deaths$value)
+#test <- ccsr_dx(pneumococcal_deaths$value)
+test <- classify_ccsr_dx1(pneumococcal_deaths$value,setting = "inpatient")
+
 test2 <- lapply(test, function(X) paste(X, collapse='_')) %>% unlist()
 
 pneumococcal_deaths2 <- pneumococcal_deaths %>%
@@ -1332,9 +1334,10 @@ pneumococcal_deaths2 <- pneumococcal_deaths %>%
   summarize( ccsr = paste(ccsr, collapse='_')) %>%
   filter(!is.na(sex) & !is.na(education_recode) & !is.na(agec) & !is.na(race_recode_new))
 
-all_icd.3digit2 <- unique(unlist(str_split(paste(pneumococcal_deaths2$ccsr, collapse='_'),'_')))
+all_ccsr <- unique(unlist(str_split(paste(pneumococcal_deaths2$ccsr, collapse='_'),'_')))
 
 big.mat_full <- pbsapply(all_ccsr, function(X) var1 = grepl(X, pneumococcal_deaths2$ccsr) , simplify='array')
+
 
 
 
@@ -1380,6 +1383,12 @@ coef.df <- cbind.data.frame('coefs'=coefs, 'crcs_exp'=hcup::explain_ccsr(names(c
 mod2 <- glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial")
 
 
+
+#descriptive hcup.data::CCSR_labels
+table(mod.ds$END005)
+table(mod.ds$END002)
+
+table(mod.ds$END005, mod.ds$END002)
 ```
 
 Market basket analysis
