@@ -76,6 +76,7 @@ pneumo.deaths.in <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = 
     streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
                                   grepl('A409',all_icd) )>0,
    pneumococcal_pneum = if_else( (j13==1 | (pneumococcal==1 & j12_j18==1)) ,1,0 ),
+   pneumococcal_pneum_no_ipd = if_else(ipd==0,pneumococcal_pneum,0),
    agec = if_else(agey>=0 & agey<5,1,
                    if_else(agey>=5 & agey<25,2,
                    if_else(agey>=25 & agey<45,3,
@@ -91,6 +92,7 @@ pneumo.deaths.in <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = 
 table( pneumo.deaths.in$j12_j18)
 table( pneumo.deaths.in$pneumococcal_pneum)
 table( pneumo.deaths.in$ipd)
+table( pneumo.deaths.in$pneumococcal_pneum,pneumo.deaths.in$pneumococcal_pneum_no_ipd)
 
 ```
 
@@ -157,6 +159,11 @@ p1_ipd$plot1 +
 p1_pneumococcal_pneum <- death_plot_fun(disease='pneumococcal_pneum',year,month, )
 p1_pneumococcal_pneum$plot1 +
   ggtitle('Pneumococcal pneumonia')
+
+p1_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',year,month )
+
+p1_pneumococcal_pneum_no_ipd$plot1 +
+  ggtitle('Pneumococcal pneumonia (no ipd)')
 
 ```
 
@@ -367,7 +374,8 @@ p1_a <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
 
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
     annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
-  ylab('N IPD deaths')
+  ylab('N deaths')+
+  ggtitle('Invasive pneumococcal disease')
 p1_a
 
 ggplotly(p1_a)
@@ -389,9 +397,9 @@ ggplot(data=ds1, aes(x=date, y=rr_median)) +
 
 ```
 
-Pneumococcal pneumonia
+Pneumococcal pneumonia (no IPD)
 ```{r}
-ds1 <- p1_pneumococcal_pneum$ts %>%
+ds1 <- p1_pneumococcal_pneum_no_ipd$ts %>%
   mutate(date=as.Date(paste(year, month, '01', sep='-')),
          qtr=as.factor(lubridate::quarter(date)),
          index= interval('2014-01-01', date) %/% months(1) ,
@@ -420,15 +428,14 @@ p1_b <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
 
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
     annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
-  ylab('N Pneumococcal Pneumonia deaths')
+  ylab('N deaths') +
+  ggtitle('Non-invasive pneumococcal pneumonia')
 p1_b
 
 ggplotly(p1_b)
 
-
 ds1 <- ds1 %>%
   mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
 
 ggplot(data=ds1, aes(x=date, y=rr_median)) +
   geom_line() +
@@ -441,6 +448,8 @@ ggplot(data=ds1, aes(x=date, y=rr_median)) +
     annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=1.5, label=c('March 2020', 'August 2021'), angle=90, col='gray')
 
 ```
+
+
 
 Did the rate change by age group or ethnic group?
 ```{r}
