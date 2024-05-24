@@ -1,5 +1,5 @@
 
-death_plot_fun <- function(disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6', ...){
+death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6', ...){
   
   grouping_vars <- quos(...)
   disease_sym <- ensym(disease)
@@ -39,7 +39,8 @@ death_plot_fun <- function(disease='pneumococcal',reg.form='N_deaths_pre ~ index
   mod1 <- glm(reg.form,
               data=ds1, family='poisson')
   
-  preds <- pred_interval(mod=mod1,model.type='poisson')
+  preds <- pred_interval(mod=mod1,ds.glm=ds1)
+  
   ds1a <- cbind.data.frame(ds1,preds)%>%
     mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
   

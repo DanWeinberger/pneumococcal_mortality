@@ -142,486 +142,72 @@ pop2 <- pop1 %>%
 
 
 ```{r}
-p1_ipd <-  death_plot_fun(disease='ipd',year,month )
+p1_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6',year,month )
 
 p1_ipd$plot1 +
   ggtitle('IPD')
 
 
-p1_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',year,month )
+p1_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6',year,month )
 
 p1_pneumococcal_pneum_no_ipd$plot1 +
   ggtitle('Non-invasive pneumococcal pneumonia')
 
 ```
+Time series plots
+
+```{r}
+p1_ipd$ts.plot +
+  ggtitle('IPD')
+
+p1_pneumococcal_pneum_no_ipd$ts.plot +
+  ggtitle('Non-invasive pneumococcal pneumonia')
+```
+
+
 ### Stratified by age category
 
 ```{r, fig.width=12, fig.height=6}
-p2a <- death_plot_fun(disease='ipd',year,month, agec) 
-p3a <- p2a$plot1 + facet_wrap(~agec, scales='free', nrow=1) +ggtitle("IPD")
+p1_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 +agec',year,month,agec )
 
-p3a
+p1_ipd$plot1 +
+  facet_wrap(~agec)+
+  ggtitle('IPD')
+
+
+p1_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6+agec',year,month,agec )
+
+p1_pneumococcal_pneum_no_ipd$plot1 +
+    facet_wrap(~agec)+
+  ggtitle('Non-invasive pneumococcal pneumonia')
 ```
 
 ### Stratified by race/ethnicity
 
 ```{r}
-p2b <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',year,month, agec) 
-p3b <- p2b$plot1 + facet_wrap(~agec, scales='free', nrow=1) +ggtitle("Non-invasive pneumococcal pneumonia")
+p3_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 +race_recode_new',year,month,race_recode_new )
 
-p3b
-```
+p3_ipd$plot1 +
+  facet_wrap(~race_recode_new)+
+  ggtitle('IPD')
 
-## Patterns by race
 
-```{r, fig.width=12, fig.height=6}
-p3a <- death_plot_fun(disease='ipd',year,month, race_recode_new) 
-p4a <- p3a$plot1+ facet_wrap(~race_recode_new, scales='free', nrow = 1) + ggtitle('IPD')
+p3_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6+race_recode_new',year,month,race_recode_new )
 
-p3b <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',year,month, race_recode_new) 
-p4b <- p3b$plot1+ facet_wrap(~race_recode_new, scales='free', nrow = 1) + ggtitle('Non-invasive pneumococcal pneum.')
-
-grid.arrange(p4a, p4b,nrow=2)
-```
-
-```{r,fig.width=unit(15,"cm"), fig.height=unit(7,"cm")}
-p3a <- death_plot_fun(disease='ipd',year,month, race_recode_new, agec) 
-
-p3a$ts$date <- as.Date(paste(p3a$ts$year, p3a$ts$month, '01',sep='-') , '%Y-%m-%d' )
-
-p3a$ts$year <- as.numeric(as.character(p3a$ts$year))
-
-p3a.ds <- merge(p3a$ts, pop2, by=c('agec','race_recode_new', 'date', 'year')) %>%
-  filter(year<2020) %>% #Pre-padnemic rates
-  group_by(race_recode_new, agec) %>%
-  summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
-  ungroup() %>%
-  mutate(inc=N_deaths/pop*100000 ,
-         race_recode_new=as.character(race_recode_new)) %>%
-  filter(!is.na(race_recode_new)) %>%
-  mutate( race_short = if_else(race_recode_new=='American Indian', 'Amer. Ind.',
-                               if_else( race_recode_new=='Asian/Pacific Islanders', 'Asian/PI',
-                                      race_recode_new)),
-           race_recode_new=factor(race_recode_new))
-  
-
-ggplot(p3a.ds, aes(x=agec, y=log(inc), group=race_short,col=race_short, linetype=race_short)) +
-  geom_line()+
-  theme_classic()+
-  ggtitle('Rate of IPD death by age and race/ethnicity')+
-   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
-  ylab('log(Deaths/100,000)') +
-  xlab('') +
-    geom_dl(aes(label = race_short), method = "first.qp") +
-   # Allow labels to bleed past the canvas boundaries
-    coord_cartesian(clip = 'off') +
-    # Remove legend & adjust margins to give more space for labels
-    # Remember, the margins are t-r-b-l
-    theme(legend.position = 'none',
-          plot.margin = margin(0.1, 2.6, 0.1, 0.1, "cm")) 
-```
-
-### Rate of Death by age and race/ethnicity
-
-```{r}
-###
-
-p3b <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',year,month, race_recode_new, agec) 
-
-p3b$ts$date <- as.Date(paste(p3b$ts$year, p3b$ts$month, '01',sep='-') , '%Y-%m-%d' )
-
-p3b$ts$year <- as.numeric(as.character(p3b$ts$year))
-
-p3b.ds <- merge(p3b$ts, pop2, by=c('agec','race_recode_new', 'date', 'year')) %>%
-  filter(year<2020) %>% #Pre-padnemic rates
-  group_by(race_recode_new, agec) %>%
-  summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
-  ungroup() %>%
-  mutate(inc=N_deaths/pop*100000 ,
-         race_recode_new=as.character(race_recode_new)) %>%
-  filter(!is.na(race_recode_new)) %>%
-  mutate( race_short = if_else(race_recode_new=='American Indian', 'Amer. Ind.',
-                               if_else( race_recode_new=='Asian/Pacific Islanders', 'Asian/PI',
-                                      race_recode_new)),
-           race_recode_new=factor(race_recode_new))
-  
-
-ggplot(p3b.ds, aes(x=agec, y=log(inc), group=race_short,col=race_short, linetype=race_short)) +
-  geom_line()+
-  theme_classic()+
-  ggtitle('Rate of pneumococcal pneum. death by age and race/ethnicity')+
-   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
-  ylab('log(Deaths/100,000)') +
-  xlab('') +
-    geom_dl(aes(label = race_short), method = "first.qp") +
-   # Allow labels to bleed past the canvas boundaries
-    coord_cartesian(clip = 'off') +
-    # Remove legend & adjust margins to give more space for labels
-    # Remember, the margins are t-r-b-l
-    theme(legend.position = 'none',
-          plot.margin = margin(0.1, 2.6, 0.1, 0.1, "cm")) 
+p3_pneumococcal_pneum_no_ipd$plot1 +
+    facet_wrap(~race_recode_new)+
+  ggtitle('Non-invasive pneumococcal pneumonia')
 ```
 
 ## Question 1: Did the rate of death due to pneumococcus change during the pandemic?
 
-Fit model to 2014-2019 data, extrapolate to 2020 and beyond
-
-IPD
-```{r}
-
-ipd1 <- death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6',year,month) 
-
-ipd1$ts.plot
-
-ipd1$rr.plot
-
-
-```
-
-```{r}
-
-pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6',year,month) 
-
-pneumococcal_pneum_no_ipd$ts.plot
-
-pneumococcal_pneum_no_ipd$rr.plot
-
-
-```
 
 
 
 ### How did the rate change by age group or ethnic group?
-```{r}
-ds2 <- p2a$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
-         log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
-mod.mat2 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec, data=ds2))
-names(mod.mat2) <- gsub('-','_',names(mod.mat2))
-names(mod.mat2) <- gsub(' ','_',names(mod.mat2))
 
-ds2 <- cbind.data.frame(ds2,mod.mat2[,grep('agec', names(mod.mat2))] )
-
-#Poisson
-mod2 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  +  
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older , 
-            data=ds2, family='poisson')
-
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
-
-ds2 <- cbind.data.frame(ds2,pred_interval(mod=mod2,model.type='poisson',ds.glm=ds2))
-
-ggplot(data=ds2, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(~agec)+
-  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') 
-
-
-
-ds2 <- ds2 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds2, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
-  #ylim(0.1,5) +
-    coord_cartesian(ylim = c(0.1, 5))+
-
-  geom_hline(yintercept=1, lty=2, col='red') +
-  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-
-  facet_wrap(~agec)
-
-```
-
-race/ethnicity 
-
-```{r, fig.width=8, fig.height=6}
-
-p3 <- death_plot_fun(disease='ipd',year,month, race_recode_new) 
-
-ds3 <- p3$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
-         log_offset=log(1)) %>%
-  filter(  !is.na(race_recode_new) )  
-
-
-mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + race_recode_new, data=ds3))
-names(mod.mat3) <- gsub('-','_',names(mod.mat3))
-names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
-names(mod.mat3) <- gsub('/','_',names(mod.mat3))
-#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
-
-ds3 <- cbind.data.frame(ds3,mod.mat3[,c( grep('race_recode_new', names(mod.mat3)))] )
-
-#Poisson
-mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + race_recode_newBlack +race_recode_newHispanic + race_recode_newAmerican_Indian + race_recode_newAsian_Pacific_Islanders , 
-            data=ds3, family='poisson')
-
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
-
-
-ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
-
-ggplot(data=ds3, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(~race_recode_new, scales='free')+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-  ylim(0,NA)
-
-
-
-ds3 <- ds3 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds3, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
- # ylim(0.1,5) +
-    coord_cartesian(ylim = c(0.1, 5))+
-  geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-  facet_wrap(~race_recode_new)
-
-```
-
-
-## Age and cause
-
-
-```{r, fig.width=10, fig.height=6}
-
-p3 <- death_plot_fun(disease='pneumococcal',year,month, j13, agec) 
-
-ds3 <- p3$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
-         log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older')  )  
-
-mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +j13, data=ds3))
-names(mod.mat3) <- gsub('-','_',names(mod.mat3))
-names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
-names(mod.mat3) <- gsub('/','_',names(mod.mat3))
-#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
-
-ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode_new', names(mod.mat3)))] )
-
-#Poisson
-mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + 
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + j13   , 
-            data=ds3, family='poisson')
-
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
-
-
-ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
-
-p1 <-ggplot(data=ds3, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_grid(j13~agec, scales='free')+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80')+
-  coord_cartesian(xlim=c(as.Date('2020-01-01'), as.Date('2021-12-01')))
-p1
-ggplotly(p1)
-
-
-ds3 <- ds3 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds3, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
- # ylim(0.1,5) +
-    coord_cartesian(ylim = c(0.1, 5))+
-  geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-  facet_wrap(race_recode_new~agec)
-
-```
-
-
-## Age and cause
-
-
-```{r, fig.width=10, fig.height=6}
-
-p3 <- death_plot_fun(disease='pneumococcal',year,month, j13) 
-
-ds3 <- p3$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
-         log_offset=log(1)) 
-
-mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + j13, data=ds3))
-names(mod.mat3) <- gsub('-','_',names(mod.mat3))
-names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
-names(mod.mat3) <- gsub('/','_',names(mod.mat3))
-#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
-
-ds3 <- cbind.data.frame(ds3 )
-
-#Poisson
-mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + j13   , 
-            data=ds3, family='poisson')
-
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
-
-
-ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
-
-p1 <-ggplot(data=ds3, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_grid(~j13, scales='free')+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80')+
-  coord_cartesian(xlim=c(as.Date('2020-01-01'), as.Date('2021-12-01')))
-p1
-ggplotly(p1)
-
-
-ds3 <- ds3 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds3, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
- # ylim(0.1,5) +
-    coord_cartesian(ylim = c(0.1, 5))+
-  geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-  facet_wrap(race_recode_new~agec)
-
-```
-
-Non-white race/ethnicity is very sparse--try to dichotomize race (white vs non-white)
-```{r, fig.width=8, fig.height=3}
-ds3 <- p3$ts %>%
-  mutate( race_recode_new=as.character(race_recode_new),
-         race_recode_new=if_else(race_recode_new=='White', 'White', 'non_White'),
-         race_recode_new=as.factor(race_recode_new)) %>%
-    group_by( year ,month, agec, race_recode_new) %>%
-  summarize(N_deaths=sum(N_deaths)) %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
-         log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) & !is.na(race_recode_new)  ) 
-
-
-mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +race_recode_new, data=ds3))
-names(mod.mat3) <- gsub('-','_',names(mod.mat3))
-names(mod.mat3) <- gsub(' ','_',names(mod.mat3))
-names(mod.mat3) <- gsub('/','_',names(mod.mat3))
-#names(mod.mat3) <- gsub('race_recode_new','',names(mod.mat3), fixed=T)
-
-ds3 <- cbind.data.frame(ds3,mod.mat3[,c(grep('agec', names(mod.mat3)), grep('race_recode_new', names(mod.mat3)))] )
-
-#Poisson
-mod3 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + agec5_24_years + agec25_44_years +
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + race_recode_newWhite , 
-            data=ds3, family='poisson')
-
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
-
-ds3 <- cbind.data.frame(ds3,pred_interval(mod=mod3,model.type='poisson',ds.glm=ds3))
-
-ggplot(data=ds3, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(race_recode_new~agec, scales='free', nrow=2)+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
-
-ggplot(data=ds3[ds3$year==2020,], aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(race_recode_new~agec, scales='free', nrow=2)+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
-
-
-ds3 <- ds3 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds3, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
-  #ylim(0.1,5) +
-    coord_cartesian(ylim = c(0.1, 5))+
-
-  geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-
-  facet_wrap(race_recode_new~agec, nrow=2)
-```
-
-
+## How did rates change by education
 
 Occupation--86% missing
 
@@ -667,11 +253,6 @@ Education reporting flag
 education_recode: 1=HS or less; 2= some college or more; 99=missing
 
 ```{r, fig.width=6, fig.height=10}
-unique(pneumo.deaths$education1989)
-
-unique(pneumo.deaths$education2003)
-
-unique(pneumo.deaths$education_flag)
 
 pneumo.deaths.adult <- pneumo.deaths.adult %>%
   mutate(education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
@@ -680,85 +261,29 @@ pneumo.deaths.adult <- pneumo.deaths.adult %>%
          education_recode = ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )
          )
 
-table(pneumo.deaths$education_recode)
 
-p5 <- death_plot_fun(disease='pneumococcal',year,month,agec, education_recode) 
-p5$plot1+ facet_wrap(agec~education_recode, scales='free', ncol=3)
+
+p4_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 +education_recode',year,month,education_recode )
+
+p4_ipd$plot1 +
+  facet_wrap(~education_recode)+
+  ggtitle('IPD')
+
+
+p4_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6+education_recode',year,month,education_recode )
+
+p4_pneumococcal_pneum_no_ipd$plot1 +
+    facet_wrap(~education_recode)+
+  ggtitle('Non-invasive pneumococcal pneumonia')
 ```
 
-This shows a clear spike in pneumococcal mortality among young adults with HS education or lower during the first wave. This makes sense since these people are probably the least likely to be able to isolate
-```{r, fig.width=7, fig.height=5}
-
-ds5 <- p5$ts %>%
-  filter(education_recode %in% c(1,2)) %>%
-  mutate( education_recode=as.factor(education_recode)) %>%
-    group_by( year ,month, agec, education_recode) %>%
-  summarize(N_deaths=sum(N_deaths)) %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
-         log_offset=log(1)) %>%
-  filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
+```{r}
 
 
-mod.mat5 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + agec +education_recode, data=ds5))
-names(mod.mat5) <- gsub('-','_',names(mod.mat5))
-names(mod.mat5) <- gsub(' ','_',names(mod.mat5))
-names(mod.mat5) <- gsub('/','_',names(mod.mat5))
-#names(mod.mat5) <- gsub('education_recode','',names(mod.mat5), fixed=T)
 
-ds5 <- cbind.data.frame(ds5,mod.mat5[,c(grep('agec', names(mod.mat5)), grep('education_recode', names(mod.mat5)))] )
-
-#Poisson
-mod5 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  + 
-                                      agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older  + education_recode2 , 
-            data=ds5, family='poisson')
-
-#Negative binomial
-# mod2 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + agec5_24_years + agec25_44_years +
-#                                       agec45_64_years + agec65_74_years + agec75_84_years +  agec85_years_and_older, 
-#             data=ds2)
-
-ds5 <- cbind.data.frame(ds5,pred_interval(mod=mod5,model.type='poisson',ds.glm=ds5))
-
-ds5 %>%
-  filter(date>='2020-01-01') %>%
-ggplot( aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_wrap(education_recode~agec, scales='free', nrow=2)+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
-
-ds5 %>%
-  filter(year %in% c(2020,2021)) %>%
-ggplot(aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2) +
-  facet_grid(education_recode~agec, scales='free')+
-      geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') 
-
-
-ds5 <- ds5 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds5, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
-  ylim(0.1,5) +
-  geom_hline(yintercept=1, lty=2, col='red') +
-    geom_vline(xintercept=as.Date('2020-03-01'), lty=2, col='gray80') +
-
-  facet_grid(education_recode~agec)
 ```
+
+
 
 ## ABCs deaths from BactFacts (without serotype)
 through 2021
