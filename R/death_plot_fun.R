@@ -10,7 +10,8 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
     summarize(N_deaths=n()) %>%
     ungroup() %>%
     mutate(year=as.factor(year),month=as.numeric(as.character(month))) %>%
-    tidyr::complete( !!!grouping_vars, fill=list(N_deaths=0) ) 
+    tidyr::complete( !!!grouping_vars, fill=list(N_deaths=0) ) %>%
+    ungroup()
     
   
   plot.cols <- c(rep('gray85',6),'#66c2a5', '#fc8d62','#8da0cb')
