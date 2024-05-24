@@ -14,10 +14,12 @@ pred.coefs.reg.mean <-
                 mu = coef1,
                 Sigma = v.cov.mat)
 if(model.type=='poisson'){
-form2 <- update(mod$formula, 'N_deaths~. ')
+#form2 <- update(mod$formula, 'N_deaths~. ')
+form2 <- as.formula(gsub('N_deaths_pre','N_deaths',mod$formula))
 }else{
 form2 <- formula(paste( 'N_deaths~'  ,paste0(names(coef(mod1))[-1], collapse='+')))
 }
+
 mod.mat.pred <- model.matrix(form2, data = ds.glm, family = "poisson")
 
 preds.stage1.regmean <- mod.mat.pred %*% t(pred.coefs.reg.mean)

@@ -268,112 +268,26 @@ Fit model to 2014-2019 data, extrapolate to 2020 and beyond
 
 IPD
 ```{r}
-ds1 <- p1_ipd$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
-         log_offset=log(1))
 
-#Poisson
-mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
-            data=ds1, family='poisson')
+ipd1 <- death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6',year,month) 
 
-#Negative binomial
-# mod1 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
-#             data=ds1)
+ipd1$ts.plot
 
-ds1 <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='poisson'))
+ipd1$rr.plot
 
-p1_a <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2)+
-    geom_line(aes(x=date, y=pred_median), col='red', lty=2, alpha=0.2)+
-
-    geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
-  ylab('N deaths')+
-  ggtitle('Invasive pneumococcal disease')
-p1_a
-
-ggplotly(p1_a)
-
-
-ds1 <- ds1 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-
-ggplot(data=ds1, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
- # ylim(0.5,2.2) +
-  coord_cartesian(ylim = c(0.5, 2.2))+
-  geom_hline(yintercept=1, lty=2, col='red')+    
-  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=1.5, label=c('March 2020', 'August 2021'), angle=90, col='gray')
 
 ```
 
-Pneumococcal pneumonia (no IPD)
 ```{r}
-ds1 <- p1_pneumococcal_pneum_no_ipd$ts %>%
-  mutate(date=as.Date(paste(year, month, '01', sep='-')),
-         qtr=as.factor(lubridate::quarter(date)),
-         index= interval('2014-01-01', date) %/% months(1) ,
-         sin12 = sin(2*pi*index/12),
-         cos12 = cos(2*pi*index/12),
-         sin6 = sin(2*pi*index*2/12),
-         cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
-         log_offset=log(1))
 
-#Poisson
-mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
-            data=ds1, family='poisson')
+pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6',year,month) 
 
-#Negative binomial
-# mod1 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
-#             data=ds1)
+pneumococcal_pneum_no_ipd$ts.plot
 
-ds1 <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='poisson'))
+pneumococcal_pneum_no_ipd$rr.plot
 
-p1_b <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2)+
-    geom_line(aes(x=date, y=pred_median), col='red', lty=2, alpha=0.2)+
-
-    geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
-  ylab('N deaths') +
-  ggtitle('Non-invasive pneumococcal pneumonia')
-p1_b
-
-ggplotly(p1_b)
-
-ds1 <- ds1 %>%
-  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
-
-ggplot(data=ds1, aes(x=date, y=rr_median)) +
-  geom_line() +
-  theme_classic()+
-    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
- # ylim(0.5,2.2) +
-  coord_cartesian(ylim = c(0.5, 2.2))+
-  geom_hline(yintercept=1, lty=2, col='red')+    
-  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=1.5, label=c('March 2020', 'August 2021'), angle=90, col='gray')
 
 ```
-
-
-
 
 
 
@@ -387,7 +301,7 @@ ds2 <- p2a$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
@@ -450,7 +364,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter(  !is.na(race_recode_new) )  
 
@@ -517,7 +431,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older')  )  
 
@@ -585,7 +499,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) 
 
 mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + j13, data=ds3))
@@ -650,7 +564,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) & !is.na(race_recode_new)  ) 
 
@@ -787,7 +701,7 @@ ds5 <- p5$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
