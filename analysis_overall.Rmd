@@ -276,7 +276,7 @@ ds1 <- p1_ipd$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1))
 
 #Poisson
@@ -330,7 +330,7 @@ ds1 <- p1_pneumococcal_pneum_no_ipd$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1))
 
 #Poisson
@@ -387,7 +387,7 @@ ds2 <- p2a$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
@@ -450,7 +450,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter(  !is.na(race_recode_new) )  
 
@@ -517,7 +517,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older')  )  
 
@@ -585,7 +585,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) 
 
 mod.mat3 <- as.data.frame(model.matrix(~index+ sin12+cos12 +sin6 +cos6 + j13, data=ds3))
@@ -650,7 +650,7 @@ ds3 <- p3$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) & !is.na(race_recode_new)  ) 
 
@@ -787,7 +787,7 @@ ds5 <- p5$ts %>%
          cos12 = cos(2*pi*index/12),
          sin6 = sin(2*pi*index*2/12),
          cos6 = cos(2*pi*index*2/12),
-         N_deaths_pre= if_else(year %in% '2020', NA_real_,N_deaths),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
          log_offset=log(1)) %>%
   filter( !is.na(agec) & agec %in% c('25-44 years','45-64 years','65-74 years', '75-84 years','85 years and older' ) ) 
 
