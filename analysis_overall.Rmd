@@ -252,34 +252,48 @@ Education reporting flag
 
 education_recode: 1=HS or less; 2= some college or more; 99=missing
 
-```{r, fig.width=6, fig.height=10}
+```{r, fig.width=6, fig.height=4}
 
 pneumo.deaths.adult <- pneumo.deaths.adult %>%
   mutate(education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
          education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
          education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
          education_recode = ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )
-         )
+       
+) %>%
+  filter(education_recode %in% c(1,2)) %>%
+  mutate(education_recode=as.factor(education_recode)
+)
+  
 
 
 
-p4_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 +education_recode',year,month,education_recode )
+p4_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ education_recode*(1+ index+ sin12+cos12 +sin6 +cos6)',year,month,education_recode )
 
 p4_ipd$plot1 +
   facet_wrap(~education_recode)+
   ggtitle('IPD')
 
 
-p4_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6+education_recode',year,month,education_recode )
+p4_pneumococcal_pneum_no_ipd <- death_plot_fun(disease='pneumococcal_pneum_no_ipd',reg.form='N_deaths_pre ~ education_recode*(1 + index+ sin12+cos12 +sin6 +cos6)',year,month,education_recode )
 
 p4_pneumococcal_pneum_no_ipd$plot1 +
     facet_wrap(~education_recode)+
   ggtitle('Non-invasive pneumococcal pneumonia')
 ```
 
-```{r}
+```{r, fig.width=6, fig.height=4}
+
+p4_ipd$ts.plot +
+    facet_wrap(~education_recode, scales='free') +
+   ggtitle('IPD')
 
 
+p4_pneumococcal_pneum_no_ipd$ts.plot +
+    facet_wrap(~education_recode, scales='free') +
+   ggtitle('Non-invasive pneumococcal pneumonia') #+
+  #  annotate("text", x=as.Date(c('2020-04-01')), y=50, label='March 2020', angle=90, col='gray')+
+  #   annotate("text", x=as.Date(c('2021-09-01')), y=50, label= 'August 2021', angle=90, col='gray')
 
 ```
 

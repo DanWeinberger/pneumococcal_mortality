@@ -43,7 +43,8 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
   preds <- pred_interval(mod=mod1,ds.glm=ds1)
   
   ds1a <- cbind.data.frame(ds1,preds)%>%
-    mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
+    mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl) %>%
+    ungroup()
   
   p1_a <- ggplot(data=ds1a, aes(x=date, y=N_deaths)) +
     geom_line() +
@@ -51,8 +52,8 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
     geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2)+
     geom_line(aes(x=date, y=pred_median), col='red', lty=2, alpha=0.2)+
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
-    ylab('N deaths')+
+
+        ylab('N deaths')+
     ggtitle(disease)
   
   rr.plot <- 
@@ -64,8 +65,10 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
     coord_cartesian(ylim = c(0.5, 2.2))+
     geom_hline(yintercept=1, lty=2, col='red')+    
     geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
-    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=1.5, label=c('March 2020', 'August 2021'), angle=90, col='gray')
-  out.list = list('plot1'=p1, 'ts'=plot.ds1,'ts.plot'=p1_a,'rr.plot'=rr.plot)
+    annotate("text", x=as.Date(c('2020-04-01')), y=175, label='March 2020', angle=90, col='gray')+
+    annotate("text", x=as.Date(c('2021-09-01')), y=175, label= 'August 2021', angle=90, col='gray')
+    
+      out.list = list('plot1'=p1, 'ts'=plot.ds1,'ts.plot'=p1_a,'rr.plot'=rr.plot)
   
   return(out.list)
 }
