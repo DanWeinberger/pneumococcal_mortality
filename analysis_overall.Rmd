@@ -182,10 +182,68 @@ p1_pneumococcal_pneum_no_ipd$plot1 +
   ggtitle('Non-invasive pneumococcal pneumonia')
 ```
 
-### Stratified by race/ethnicity
+
+## Question 1: Did the rate of death due to pneumococcus change during the pandemic?
+
+Fit model to 2014-2019 data, extrapolate to 2020 and beyond
+
+IPD
+```{r}
+ds1 <- p1_ipd$ts %>%
+  mutate(date=as.Date(paste(year, month, '01', sep='-')),
+         qtr=as.factor(lubridate::quarter(date)),
+         index= interval('2014-01-01', date) %/% months(1) ,
+         sin12 = sin(2*pi*index/12),
+         cos12 = cos(2*pi*index/12),
+         sin6 = sin(2*pi*index*2/12),
+         cos6 = cos(2*pi*index*2/12),
+         N_deaths_pre= if_else(date >= '2020-03-01', NA_real_,N_deaths),
+         log_offset=log(1))
+
+#Poisson
+mod1 <- glm(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
+            data=ds1, family='poisson')
+
+#Negative binomial
+# mod1 <- glm.nb(N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6,
+#             data=ds1)
+
+ds1 <- cbind.data.frame(ds1,pred_interval(mod=mod1,model.type='poisson'))
+
+p1_a <- ggplot(data=ds1, aes(x=date, y=N_deaths)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2)+
+    geom_line(aes(x=date, y=pred_median), col='red', lty=2, alpha=0.2)+
+
+    geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
+    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=175, label=c('March 2020', 'August 2021'), angle=90, col='gray')+
+  ylab('N deaths')+
+  ggtitle('Invasive pneumococcal disease')
+p1_a
+
+ggplotly(p1_a)
+
+
+ds1 <- ds1 %>%
+  mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl)
+
+
+ggplot(data=ds1, aes(x=date, y=rr_median)) +
+  geom_line() +
+  theme_classic()+
+    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2)+
+ # ylim(0.5,2.2) +
+  coord_cartesian(ylim = c(0.5, 2.2))+
+  geom_hline(yintercept=1, lty=2, col='red')+    
+  geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), lty=3, col='gray') +
+    annotate("text", x=as.Date(c('2020-04-01','2021-09-01')), y=1.5, label=c('March 2020', 'August 2021'), angle=90, col='gray')
+
+```
 
 ```{r}
 p3_ipd <-  death_plot_fun(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 +race_recode_new',year,month,race_recode_new )
+
 
 p3_ipd$plot1 +
   facet_wrap(~race_recode_new)+
@@ -205,6 +263,7 @@ p3_pneumococcal_pneum_no_ipd$plot1 +
 
 
 ### How did the rate change by age group or ethnic group?
+
 
 
 ## How did rates change by education
