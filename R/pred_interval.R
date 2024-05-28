@@ -1,5 +1,5 @@
 
-pred_interval <-function(mod,model.type='poisson',ds.glm=ds1, seedN=123,stage1.samples=10000, stage2.samples=1){
+pred_interval <-function(mod,ds.glm=ds1, seedN=123,stage1.samples=10000, stage2.samples=1){
   coef1 <- coef(mod)
   coef1[is.na(coef1)] <- 0
 
@@ -13,11 +13,13 @@ pred.coefs.reg.mean <-
   MASS::mvrnorm(n = stage1.samples,
                 mu = coef1,
                 Sigma = v.cov.mat)
-if(model.type=='poisson'){
-form2 <- update(mod$formula, 'N_deaths~. ')
-}else{
-form2 <- formula(paste( 'N_deaths~'  ,paste0(names(coef(mod1))[-1], collapse='+')))
-}
+#if(model.type=='poisson'){
+#form2 <- update(mod$formula, 'N_deaths~. ')
+form2 <- as.formula(gsub('N_deaths_pre','N_deaths',mod$formula))
+# }else{
+# form2 <- formula(paste( 'N_deaths~'  ,paste0(names(coef(mod1))[-1], collapse='+')))
+# }
+
 mod.mat.pred <- model.matrix(form2, data = ds.glm, family = "poisson")
 
 preds.stage1.regmean <- mod.mat.pred %*% t(pred.coefs.reg.mean)
@@ -26,13 +28,13 @@ preds.stage1.regmean <- apply(preds.stage1.regmean, 2,
 
 preds.stage1.regmean[preds.stage1.regmean >100] <- 100
 
-if(model.type=='poisson'){
+#if(model.type=='poisson'){
   preds.stage2 <- rpois(n = length(preds.stage1.regmean) * stage2.samples,
                         exp(preds.stage1.regmean))
-}else{
-  preds.stage2 <- rnbinom(n = length(preds.stage1.regmean) * stage2.samples,
-                          size = mod$theta, mu = exp(preds.stage1.regmean))
-}
+# }else{
+#   preds.stage2 <- rnbinom(n = length(preds.stage1.regmean) * stage2.samples,
+#                           size = mod$theta, mu = exp(preds.stage1.regmean))
+# }
 preds.stage2 <- matrix(preds.stage2,
                        nrow = nrow(preds.stage1.regmean),
                        ncol = ncol(preds.stage1.regmean) * stage2.samples)
