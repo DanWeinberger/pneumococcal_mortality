@@ -68,7 +68,7 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
     annotate("text", x=as.Date(c('2020-04-01')), y=175, label='March 2020', angle=90, col='gray')+
     annotate("text", x=as.Date(c('2021-09-01')), y=175, label= 'August 2021', angle=90, col='gray')
     
-      out.list = list('plot1'=p1, 'ts'=plot.ds1,'ts.plot'=p1_a,'rr.plot'=rr.plot)
+      out.list = list('plot1'=p1, 'ts'=plot.ds1,'ts.plot'=p1_a,'rr.plot'=rr.plot,'mod1'=mod1)
   
   return(out.list)
 }
