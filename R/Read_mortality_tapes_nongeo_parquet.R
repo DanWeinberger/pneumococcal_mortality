@@ -1,6 +1,7 @@
 library(dplyr)
 library(readr)
 library(arrow)
+library(pbapply)
 #the geographic resolution missing from the public data
 
 
@@ -10,9 +11,9 @@ file.names1<- list('VS14MORT.DUSMCPUB','VS15MORT.DUSMCPUB','VS16MORT.DUSMCPUB','
 
 all.ds <- pblapply(file.names1, function(x){
   d1 <- read_fwf(file=paste0("R:/NCHS_mortality_public/" ,x),
-                 fwf_positions(start=c(20,61,63,64,65,69,102,445,448, 484,489,   70,71, 79,484,146,167,174,181,188,195,202,209,216,223,230,237,244,251,258,265,272,279,286,293,300, 806),
-                               end=c(  20,62,63,64,66,69,105,446,448, 486,490,  70,73, 80,486,149, 171,178,185,192,199,206,213,220,227,234,241,248,255,262,269,276,283,290,297,304, 817),
-                               col_names = c('res_status','education1989','education2003','education_flag','month','sex','year','race','race_imp2021','hisp_2021','race_recode40','age_detail_class','age_detail_number','agec','hispanic', paste0('icd', 1:21 ), 'occupation' )),
+                 fwf_positions(start=c(20,61,63,64,65,69,102,445,448, 484,489,   70,71, 79,484,146,167,174,181,188,195,202,209,216,223,230,237,244,251,258,265,272,279,286,293,300, 806,83),
+                               end=c(  20,62,63,64,66,69,105,446,448, 486,490,  70,73, 80,486,149, 171,178,185,192,199,206,213,220,227,234,241,248,255,262,269,276,283,290,297,304, 817,83),
+                               col_names = c('res_status','education1989','education2003','education_flag','month','sex','year','race','race_imp2021','hisp_2021','race_recode40','age_detail_class','age_detail_number','agec','hispanic', paste0('icd', 1:21 ), 'occupation','place_of_death' )),
                   guess_max=10000)
   return(d1)
 })
@@ -71,7 +72,7 @@ df1 <- open_dataset("R:/NCHS_mortality_public/parquet2", format = "parquet") %>%
                                                 ))))
 
                  ) %>%
-  dplyr::select(year, month,age_detail_number, sex, starts_with('education'),all_icd,hisp_recode,race_recode,race_recode_alt,race_recode_new,agey) %>%
+  dplyr::select(year, month,age_detail_number, sex, place_of_death, starts_with('education'),all_icd,hisp_recode,race_recode,race_recode_alt,race_recode_new,agey) %>%
     collect()
 
 write_parquet(as.data.frame(df1), "R:/NCHS_mortality_public/parquet3/compiled_data.parquet")

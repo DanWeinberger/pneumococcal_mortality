@@ -100,6 +100,15 @@ table( pneumo.deaths.in$pneumococcal_pneum_no_ipd)
 table( pneumo.deaths.in$ipd,pneumo.deaths.in$pneumococcal_pneum_no_ipd)
 table( pneumo.deaths.in$pneumococcal)
 
+table(pneumo.deaths.in$agec,pneumo.deaths.in$place_of_death)
+table(pneumo.deaths.in$year,pneumo.deaths.in$place_of_death)
+
+
+place_of_death_overall<- open_dataset("R:/NCHS_mortality_public/parquet3", format = "parquet")  %>%
+  group_by(year, place_of_death) %>%
+  summarize(N=n()) %>%
+  collect() %>%
+  reshape2::dcast(year~place_of_death)
 ```
 
 
