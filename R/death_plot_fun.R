@@ -9,14 +9,15 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
     group_by( !!!grouping_vars ) %>%
     summarize(N_deaths=n()) %>%
     ungroup() %>%
-    mutate(year=as.factor(year),month=as.numeric(as.character(month))) %>%
+    mutate(yearN=as.factor(yearN),
+           monthN=as.numeric(as.character(monthN))) %>%
     tidyr::complete( !!!grouping_vars, fill=list(N_deaths=0) ) %>%
     ungroup()
     
   
   plot.cols <- c(rep('gray85',6),'#66c2a5', '#fc8d62','#8da0cb')
   
-  p1 <- ggplot(plot.ds1, aes(x=month, y=N_deaths, group=year, col=year)) +
+  p1 <- ggplot(plot.ds1, aes(x=monthN, y=N_deaths, group=yearN, col=yearN)) +
     geom_line() +
     theme_classic() +
     scale_color_manual(values=plot.cols)+
@@ -24,14 +25,14 @@ death_plot_fun <- function(disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+c
   
   
   ds1 <- plot.ds1 %>%
-    mutate(date=as.Date(paste(year, month, '01', sep='-')),
+    mutate(date=as.Date(paste(yearN, monthN, '01', sep='-')),
            qtr=as.factor(lubridate::quarter(date)),
            index= interval('2014-01-01', date) %/% months(1) ,
            sin12 = sin(2*pi*index/12),
            cos12 = cos(2*pi*index/12),
            sin6 = sin(2*pi*index*2/12),
            cos6 = cos(2*pi*index*2/12),
-           year=as.numeric(year),
+           yearN=as.numeric(yearN),
            N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
            log_offset=log(1))
   
