@@ -32,6 +32,7 @@ library(tidyr)
 library(pbapply)
 library(parquetize)
 library(gridExtra)
+library(INLA)
 
 library(DBI)
 
@@ -141,6 +142,153 @@ pop2 <- pop1 %>%
 # pop2.sex <- pop1 %>%
 #   group_by(date, agec, sex) %>%
 #   summarize(pop.interpol= sum(pop.interpol))
+```
+
+## Incidence by single year of age
+
+```{r}
+
+#pop data from CDC WONDER
+pop2020_2022<- read.delim('./Data/Single-Race Population Estimates 2020-2022 by State and Single-Year Age.txt') %>%
+  rename(agey=Single.Year.Ages,
+         year="Yearly.July.1st.Estimates" ) %>%
+  dplyr::select(agey, year, Population) %>%
+  filter(!is.na(year)) %>%
+  filter(year>=2021)
+
+pop2010_2020<- read.delim('./Data/Single-Race Population Estimates 2010-2020 by State and Single-Year Age.txt') %>%
+  rename(agey=Single.Year.Ages,
+         year="Yearly.July.1st.Estimates" ) %>%
+  dplyr::select(agey, year, Population) %>%
+  filter(!is.na(year))
+
+pop_combined <- bind_rows(pop2010_2020, pop2020_2022)%>%
+  mutate(agey = if_else(agey=='< 1 year', '0', agey),
+         agey = gsub('years','',agey),
+        agey = gsub('year','',agey),
+         agey = gsub('+','',agey, fixed=T),
+        agey=as.numeric(agey))
+
+
+N_deaths <- pneumo.deaths.in %>%
+  mutate(agey =floor(agey),
+         date= as.Date(paste(year, month,'01', sep='-')),
+         year=year(date),
+         agey = if_else(agey>85,85,agey)) %>%
+ # filter(ipd==1) %>%
+  group_by(agey, year) %>%
+  summarize(N=n()) %>%
+  ungroup() %>%
+  full_join(pop_combined, by=c('agey','year')) %>%
+  filter(year>=2014 & year <=2019) %>%
+  mutate(N= if_else(is.na(N),0,N)) %>%
+  group_by(agey) %>%
+  summarize( N=sum(N), Population=sum(Population)) %>%
+  mutate(inc = N/Population*100000)
+
+ggplot(N_deaths,aes(x=agey, y=inc)) +
+  geom_line() +
+  theme_minimal()+
+  ylab('Deaths/100000') +
+  xlab('Age (Years)')
+
+
+
+```
+Pandemic excess deaths by single year of age--INLA model of age effetc, pandemic effect and time
+```{r}
+N_deaths_yr <- pneumo.deaths.in %>%
+  mutate(agey =floor(agey),
+         date= as.Date(paste(year, month,'01', sep='-')),
+         year=year(date),
+         agey = if_else(agey>85,85,agey)) %>%
+  group_by(agey, year) %>%
+  summarize(N_deaths=n()) %>%
+  ungroup()%>%
+  full_join(pop_combined, by=c('agey','year')) %>%
+  #filter(year>=2014 & year <=2019) %>%
+  mutate(N_deaths= if_else(is.na(N_deaths),0,N_deaths),
+         agey=agey/85,
+         agey2=agey/85,
+         agey3=agey/85,
+         t=year,
+         pandemic_period=if_else(year>=2020,1,0),
+         log.offset=log(Population/100000)) %>%
+  filter(year<=2021)
+
+
+formula1 <- N_deaths ~  0 + #intercept
+  f(agey,model = "ar1", hyper = list(theta1 = list(prior = "loggamma", param = c(3, 2))))+  #age-specific intercept
+  f(agey2,constr=T,t,model = "ar1", hyper = list(theta1 = list(prior = "loggamma", param = c(3, 2)))) +   #age-varying effect for time
+  f(agey3, constr=T,pandemic_period,model = "ar1", hyper = list(theta1 = list(prior = "loggamma", param = c(3, 2))))+  #age-varying effect for pandemic
+  offset(log.offset)
+
+
+#from Josh warren
+
+#prior_fixed<-list(mean.intercept = 0.00, prec.intercept = (1.00/(100.00^2)),  #\beta_0 ~ N(0.00, 100.00^2)
+#                  mean = 0.00, prec = (1.00/(100.00^2)))                      #\beta_j ~ N(0.00, 100.00^2); j=1,...,p
+
+prior_fixed<-list(mean.intercept = 0.00, prec.intercept = (1.00/(100.00^2)))  #\beta_0 ~ N(0.00, 100.00^2)
+
+
+prior_hyper<-list(theta = list(prior = "normal", param = c(0.00, (1.00/(100.00^2)))))  #ln(r) ~ N(0.00, 100.00^2)
+
+# Run model
+# Start the clock!
+ptm <- proc.time()
+
+inla.out <- inla(formula1, family = "nbinomial", data = N_deaths_yr,
+                 control.fixed = prior_fixed,
+                 control.family = list(hyper = prior_hyper),
+                 control.compute = list(dic = TRUE, 
+                                        waic = TRUE, 
+                                        config = TRUE,
+                                        return.marginals.predictor = TRUE))
+
+# Stop the clock
+proc.time() - ptm
+
+b1 <- N_deaths_yr
+
+# Extract fitted values
+b1$pred1 <- inla.out$summary.fitted.values[,"mean"]
+
+p0.fitted <- ggplot(b1, aes(x=agey*85, y=log(pred1/Population*100000), group=t, col=t))+
+  geom_line()+
+  theme_classic()
+p0.fitted
+
+#extract random effects
+re.age <- inla.out$summary.random$agey %>%
+  mutate()
+
+p1.age.inla <- ggplot(re.age, aes(x=ID*85, y=mean))+
+  geom_line()+
+  theme_classic()+
+  geom_ribbon(data=re.age, aes(x=ID*85, ymin=`0.025quant`, ymax=`0.975quant`), alpha=0.2)
+p1.age.inla
+
+re.age.time <- inla.out$summary.random$agey2 %>%
+  mutate()
+
+p2.time.age.inla <- ggplot(re.age.time, aes(x=ID*85, y=exp(mean)))+
+  geom_line()+
+  theme_classic()+
+  geom_ribbon(data=re.age.time, aes(x=ID*85, ymin=exp(`0.025quant`), ymax=exp(`0.975quant`)), alpha=0.2)+
+  geom_hline(yintercept = 1)
+p2.time.age.inla
+
+re.age.pandemic <- inla.out$summary.random$agey3 %>%
+  mutate()
+
+p3.pandemic.age.inla <- ggplot(re.age.pandemic, aes(x=ID*85, y=exp(mean)))+
+  geom_line()+
+  theme_classic()+
+  geom_ribbon(data=re.age.pandemic, aes(x=ID*85, ymin=exp(`0.025quant`), ymax=exp(`0.975quant`)), alpha=0.2) +
+  geom_hline(yintercept = 1)
+p3.pandemic.age.inla
+
 ```
 
 
