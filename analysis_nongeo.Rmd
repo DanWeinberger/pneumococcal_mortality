@@ -216,7 +216,7 @@ p3$ts$year <- as.numeric(as.character(p3$ts$year))
 
 p3.ds <- merge(p3$ts, pop2, by=c('agec','race_recode_new', 'date', 'year')) %>%
   filter(year<2020) %>% #Pre-padnemic rates
-  group_by(race_recode_new, agec) %>%
+  group_by(race_recode_new, agec) %>% #NOTE PROBLEM HERE__THIS IS SUMMING ACROSS ALL 6 years rather than taking an annual rate
   summarize(N_deaths=sum(N_deaths), pop=mean(pop.interpol))%>%
   ungroup() %>%
   mutate(inc=N_deaths/pop*100000 ,
