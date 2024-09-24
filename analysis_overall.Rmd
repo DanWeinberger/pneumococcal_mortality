@@ -71,6 +71,8 @@ pneumo.deaths.in <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = 
     covid = grepl('U071', all_icd),
     j154 =1 *grepl('J154', all_icd), #streptococcal pneumonia
     j181 =1 *grepl('J181', all_icd) , #unspecified lobar pneumonia
+   obesity= 1*grepl('E6601', all_icd)| grepl('E6609', all_icd)|grepl('E662', all_icd)|grepl('E668', all_icd)|grepl('E669', all_icd)  ,
+ 
     j12_j18 = grepl('J12', all_icd) + grepl('J13', all_icd) + grepl('J14', all_icd) + grepl('J15', all_icd) + grepl('J16', all_icd) + grepl('J17', all_icd) + grepl('J18', all_icd),
    j12_j18 = if_else(j12_j18>1,1,j12_j18),
     streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
@@ -110,6 +112,22 @@ place_of_death_overall<- open_dataset("R:/NCHS_mortality_public/parquet3", forma
   collect() %>%
   reshape2::dcast(year~place_of_death)
 ```
+
+```{r}
+
+
+obesity <- pneumo.deaths.in %>%
+  mutate(date = as.Date(paste(year, month,'01',sep='-')), 
+         month=as.numeric(month),
+         qtr=year + quarter(date)/4 -1/4 ) %>%
+  #  filter(date<='2020-03-01') %>%
+  group_by(qtr) %>%
+  summarize(obesity_prop=mean(obesity)) 
+
+ggplot(obesity, aes(x=qtr, y=obesity_prop))+
+  geom_line()
+```
+
 
 
 ```{r}
