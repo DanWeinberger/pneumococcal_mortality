@@ -100,8 +100,6 @@ table( pneumo.deaths.in$pneumococcal_pneum,pneumo.deaths.in$pneumococcal_pneum_n
 
 ```{r}
 
-
-
 deaths2019 <- pneumo.deaths.in %>% filter(year==2019) %>% summarize(N=n())
 
 pneumo.deaths.in %>%
@@ -144,6 +142,23 @@ pop2 <- pop1 %>%
 # pop2.sex <- pop1 %>%
 #   group_by(date, agec, sex) %>%
 #   summarize(pop.interpol= sum(pop.interpol))
+```
+
+
+## obesity
+```{r}
+obesity <- pneumo.deaths.in %>%
+  mutate(
+obesity= 1*grepl('E6601', all_icd)| grepl('E6609', all_icd)|grepl('E662', all_icd)|grepl('E668', all_icd)|grepl('E669', all_icd)  ,
+date = as.Date(paste(year, month,'01',sep='-')),
+         month=as.numeric(month),
+         qtr=year + quarter(date)/4 -1/4 ) %>%
+  #  filter(date<='2020-03-01') %>%
+  group_by(qtr) %>%
+  summarize(obesity_prop=mean(obesity))
+
+ggplot(obesity, aes(x=qtr, y=obesity_prop))+
+  geom_line()
 ```
 
 ## Incidence by single year of age
