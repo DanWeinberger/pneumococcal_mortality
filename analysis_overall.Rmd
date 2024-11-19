@@ -74,11 +74,15 @@ pneumo.deaths.in <-  open_dataset("R:/NCHS_mortality_public/parquet3", format = 
    obesity= 1*grepl('E6601', all_icd)| grepl('E6609', all_icd)|grepl('E662', all_icd)|grepl('E668', all_icd)|grepl('E669', all_icd)  ,
  
     j12_j18 = grepl('J12', all_icd) + grepl('J13', all_icd) + grepl('J14', all_icd) + grepl('J15', all_icd) + grepl('J16', all_icd) + grepl('J17', all_icd) + grepl('J18', all_icd),
+   
    j12_j18 = if_else(j12_j18>1,1,j12_j18),
     streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
                                   grepl('A409',all_icd) )>0,
+   
    pneumococcal_pneum = if_else( (j13==1 | (pneumococcal==1 & j12_j18==1)) ,1,0 ),
+   
    pneumococcal_pneum_no_ipd = if_else(ipd==0,pneumococcal_pneum,0),
+   
    agec = if_else(agey>=0 & agey<5,1,
                    if_else(agey>=5 & agey<25,2,
                    if_else(agey>=25 & agey<45,3,

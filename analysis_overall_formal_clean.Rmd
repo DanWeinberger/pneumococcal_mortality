@@ -1,0 +1,1279 @@
+---
+title: "Analysis of pneumococcal deaths in the US"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# 0. Load packages and functions
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+
+#install.packages("groundhog")
+#library("groundhog")
+library(tidyverse)
+library(MMWRweek)
+#library(dplyr)
+#library(stringr)
+#library(lubridate)
+#library(ggplot2)
+library(MASS)
+library(plotly)
+library(arules)
+library(usdata)
+library(covidcast)
+library(arulesViz)
+library(directlabels)
+library(arrow)
+library(duckdb)
+library(Rtsne)
+library(cdlTools)
+library(readr)
+library(reshape2)
+library(tidyr)
+library(pbapply)
+library(parquetize)
+library(gridExtra)
+library(viridis)
+library(DBI)
+library(ggpubr)
+library(ggh4x)
+library(ggsci)
+library(gtsummary)
+library(patchwork)
+library(readxl)
+library(slider)
+library(aweek)
+
+#groundhog.library(pkgs, "2022-04-21")
+
+#groundhog.library('parquetize','2022-04-22')
+
+source('./R/death_plot_fun.R')
+source('./R/pred_interval.R')
+
+source('./R/Format_US_Population.R')
+
+#https://github.com/socdataR/wonderapi
+#devtools::install_github("socdataR/wonderapi", build_vignettes = F, force=T)
+#library(wonderapi)
+
+```
+
+Parquet file created with './R/Read_mortality_tapes_nongeo_parquet.R'
+
+Following CDC wonder: 6 race categories - American Indian or Alaska Native (AIAN); Asian; Black or African American; More than one race; Native Hawaiian or Other Pacific Islander (NHOPI); White.
+
+# 1. Data preparation
+```{r}
+pneumo.deaths.in <-  open_dataset("R/compiled_data.parquet", format = "parquet")  %>%
+  filter(grepl("J13|A39|J181|A403|B953|G001", all_icd)) %>%
+ collect() %>%
+  mutate( 
+   a403 = 1*grepl('A403',all_icd),
+    j13 = 1*grepl('J13', all_icd),
+    j13_prim = substr(all_icd, 1,3) =='J13',
+    b953 = 1*grepl('B953', all_icd),
+    g001 = 1*grepl('G001', all_icd),
+    pneumococcal =  1*((a403 + j13 + b953 + g001 )>0)  ,
+   sepsis=grepl('A40', all_icd) |grepl('A419', all_icd), #streptococcal or unspecified sepsis codes
+   meningitis=grepl('G00',all_icd),
+   ipd = if_else(pneumococcal==1 & (sepsis==1|meningitis==1),1,0),
+    covid = grepl('U071', all_icd),
+    j154 =1 *grepl('J154', all_icd), #streptococcal pneumonia
+    j181 =1 *grepl('J181', all_icd) , #unspecified lobar pneumonia
+    j12_j18 = grepl('J12', all_icd) + grepl('J13', all_icd) + grepl('J14', all_icd) + grepl('J15', all_icd) + grepl('J16', all_icd) + grepl('J17', all_icd) + grepl('J18', all_icd),
+   j12_j18 = if_else(j12_j18>1,1,j12_j18),
+    streptococcal_sepsis = 1* ( grepl('A408',all_icd) +  
+                                  grepl('A409',all_icd) )>0,
+   pneumococcal_pneum = if_else( (j13==1 | (pneumococcal==1 & j12_j18==1)) ,1,0 ),
+   pneumococcal_pneum_no_ipd = if_else(ipd==0,pneumococcal_pneum,0),
+   non_resp_ipd = if_else(ipd == 1 & pneumococcal_pneum== 0, 1, 0),  #    non_resp_ipd = if_else(ipd == 1 & j12_j18== 0, 1, 0),  has the same result
+   agec = if_else(agey>=0 & agey<5,1,
+                   if_else(agey>=5 & agey<25,2,
+                   if_else(agey>=25 & agey<50,3,
+                   if_else(agey>=50 & agey<65,4,
+                   if_else(agey>=65 & agey<75,5,
+                   if_else(agey>=75 & agey<85,6,
+                   if_else(agey>=85 & agey<120,7,
+                           999)))))))
+                               ) %>%
+ # filter(pneumococcal==1 | j181==1 | j154==1)
+
+  filter(pneumococcal==1  & agec != 999) %>% #filter non-pneumo codes # Used to be "agec != 'missing', Should be agec!= 999 
+  mutate(agec = factor(agec, c(1,2,3,4,5,6,7),c("Under 5 Years",'5-24 years', "25-49 years","50-64 years","65-74 years" ,"75-84 years","85 years and older")),
+         race_recode_new = factor(race_recode_new, levels=c(1,2,3,4,5,999), c('White','Black','Hispanic','American Indian', 'Asian/Pacific Islanders','Other')) 
+  )
+
+  table(pneumo.deaths.in$ipd, pneumo.deaths.in$j12_j18)
+    table(pneumo.deaths.in$ipd)
+    table(pneumo.deaths.in$pneumococcal_pneum)
+
+        table(pneumo.deaths.in$ipd, pneumo.deaths.in$pneumococcal_pneum)
+    table(pneumo.deaths.in$non_resp_ipd)
+
+    
+nrow(pneumo.deaths.in)
+6153+2719
+table(pneumo.deaths.in$ipd, pneumo.deaths.in$pneumococcal_pneum)
+
+table(pneumo.deaths.in$ipd, pneumo.deaths.in$pneumococcal_pneum)
+table(pneumo.deaths.in$pneumococcal_pneum_no_ipd, pneumo.deaths.in$ipd)
+
+table(pneumo.deaths.in$pneumococcal_pneum_no_ipd, useNA = "always")
+table(pneumo.deaths.in$non_resp_ipd, useNA = "always")
+
+table( pneumo.deaths.in$j12_j18, useNA = "always")
+table( pneumo.deaths.in$pneumococcal_pneum, useNA = "always")
+table( pneumo.deaths.in$ipd, useNA = "always")
+table( pneumo.deaths.in$pneumococcal_pneum_no_ipd, useNA = "always")
+
+table( pneumo.deaths.in$ipd,pneumo.deaths.in$pneumococcal_pneum_no_ipd, useNA = "always")
+table( pneumo.deaths.in$pneumococcal, useNA = "always")
+
+table(pneumo.deaths.in$agec,pneumo.deaths.in$place_of_death, useNA = "always")
+table(pneumo.deaths.in$year,pneumo.deaths.in$place_of_death, useNA = "always")
+
+
+place_of_death_overall<- open_dataset("R/compiled_data.parquet", format = "parquet")  %>%
+  group_by(year, place_of_death) %>%
+  summarize(N=n()) %>%
+  collect() %>%
+  reshape2::dcast(year~place_of_death)
+```
+
+## 1.1 Produce adult data
+
+We only include adults with age >= 25 in the analyses.
+
+```{r}
+
+
+
+deaths2019 <- pneumo.deaths.in %>% filter(year==2019) %>% summarize(N=n())
+
+pneumo.deaths.in %>%
+  group_by(agec,year) %>%
+  filter(a403==1 & !is.na(agec)) %>%
+  summarize(N=n())
+
+pneumo.deaths.adult <- pneumo.deaths.in %>%
+  mutate(one=1) %>%
+  filter(agey>=25 & !is.na(agec)) %>%
+  mutate(agec=droplevels(agec))
+
+```
+
+
+# 2. Table 1
+
+database for table 1 should be before excluding people with NA age. So that we could know the proportion of people with missing age from the table 1.
+
+But the question is that, if we want to filter age >= 25, how could we handle the missing age people when doing this filter?
+
+After discussing with Dan, we decide to exclude people with NA age, because we do not know whether they are >= 25 of age.
+```{r}
+
+pneumo.deaths.adult_table1 <-pneumo.deaths.adult%>%
+  mutate(education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
+         education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
+         education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
+         education_recode = ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )
+       
+) %>%  mutate(education_recode=factor(education_recode,c(1,2,99), c("High school and lower", "College and higher", "Unknown"))
+) %>%  mutate(sex_s=factor(sex,c("F", "M"), c("Female", "Male"))
+)
+pneumo.deaths.adult_table1_pneumococcal_all <- pneumo.deaths.adult_table1 %>% filter(pneumococcal == 1)
+identical(pneumo.deaths.adult_table1_pneumococcal_all, pneumo.deaths.adult_table1) # should be T
+
+pneumo.deaths.adult_table1_pneumococcal_pneum <- pneumo.deaths.adult_table1 %>% filter(pneumococcal_pneum == 1)
+
+pneumo.deaths.adult_table1_non_resp_ipd <- pneumo.deaths.adult_table1 %>% filter(non_resp_ipd == 1)
+
+var_labels <- list(
+  agec = "Age Category",
+  sex_s = "Sex",
+  race_recode_new = "Race/Ethnicity",
+  education_recode = "Education"
+)
+
+table1_pneumococcal_all <- pneumo.deaths.adult_table1_pneumococcal_all %>%
+  select(agec, sex_s, race_recode_new, education_recode) %>%
+  tbl_summary(
+#    by = ,
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    percent = "column",
+    label = var_labels,
+    missing = "ifany"
+  )
+
+table1_pneumococcal_pneum <- pneumo.deaths.adult_table1_pneumococcal_pneum %>%
+  select(agec, sex_s, race_recode_new, education_recode) %>%
+  tbl_summary(
+#    by = ,
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    percent = "column",
+    label = var_labels,
+    missing = "ifany"
+  )
+
+table1_non_resp_ipd <- pneumo.deaths.adult_table1_non_resp_ipd %>%
+  select(agec, sex_s, race_recode_new, education_recode) %>%
+  tbl_summary(
+#    by = ,
+    statistic = list(all_categorical() ~ "{n} ({p}%)"),
+    percent = "column",
+    label = var_labels,
+    missing = "ifany"
+  )
+
+
+table1 <- tbl_merge(
+  tbls = list(table1_pneumococcal_all, table1_pneumococcal_pneum, table1_non_resp_ipd),
+  tab_spanner = c("**Pneumococcal Disease**", "**Pneumococcal Pneumonia**", "**Non-respiratory IPD**")
+) %>%
+  modify_header(label = "**Characteristic**") %>%
+  modify_caption("**Table 1. Distribution of Deaths by Pneumococcal Disease Categories**") %>%
+  bold_labels() 
+
+
+# Print the table
+table1
+
+
+
+#  gtsummary::as_gt(table1) %>%     gt::gtsave(filename = "figure/clean/table1.html")
+# gtsummary::as_gt(table1) %>%     gt::gtsave(filename = "figure/clean/table1.docx")
+
+```
+
+
+# 3. Time series plot adjusted for flu and RSV (Fig1, FigS1, FigS2)
+ 
+
+## 3.1 read the RSV data and detrend it
+
+```{r}
+data_rsv <- read_excel('data/NREVSS Respiratory Pathogens .xlsx', sheet = "RSV") 
+
+data_rsv_detrend <- data_rsv %>%
+  group_by(RepWeekDate) %>%
+summarize(N_test=sum(RSVtest), N_pos=sum(RSVpos)
+) %>%
+  ungroup() %>%
+  mutate(            rsv_N_test_52w = slide_dbl(N_test, mean,
+                                            .before = as.integer((52-1) / 2),
+                                            .after = as.integer((52-1) / 2),
+                                            .complete = FALSE),
+                     rsv_standardized_case_count  = (N_pos/ rsv_N_test_52w) * 100
+  )
+
+# monthly_summary_rsv consider the situation where some weeks are in 2 month and attribute the detrend case proportionally by the days in different month
+
+monthly_summary_rsv <- function(df) {
+  df %>%
+    mutate(
+      week_start = RepWeekDate - days(6),
+      week_end = RepWeekDate,
+      month_start = month(week_start),
+      month_end = month(week_end),
+      year_start = year(week_start),
+      year_end = year(week_end)
+    ) %>%
+    {bind_rows(
+      # Week in the same month
+      filter(., month_start == month_end) %>%
+        mutate(
+          month = month_start,
+          year = year_start,
+          days_in_week = 7
+        ),
+      # first part of week in different month
+      filter(., month_start != month_end) %>%
+        mutate(
+          month = month_start,
+          year = year_start,
+          days_in_week = as.numeric(ceiling_date(week_start, "month") - week_start),
+          # assign the count by days
+          N_test = N_test * days_in_week/7,
+          N_pos = N_pos * days_in_week/7,
+          rsv_standardized_case_count = rsv_standardized_case_count  # rsv_standardized_case_count was not assigned by days because it is a standardized rate.. 
+        ),
+      # second part of week in different month
+      filter(., month_start != month_end) %>%
+        mutate(
+          month = month_end,
+          year = year_end,
+          days_in_week = 7 - as.numeric(ceiling_date(week_start, "month") - week_start),
+          # assign the count by days
+          N_test = N_test * days_in_week/7,
+          N_pos = N_pos * days_in_week/7,
+          rsv_standardized_case_count = rsv_standardized_case_count  
+        )
+    )} %>%
+    # monthly summary and weighted average
+    group_by(year, month) %>%
+    summarize(
+      rsv_month_tests = sum(N_test, na.rm = TRUE),
+      rsv_month_positive = sum(N_pos, na.rm = TRUE),
+      rsv_standardized_case_month_ave = weighted.mean(rsv_standardized_case_count,  days_in_week, 
+na.rm = TRUE),
+      rsv_pos_rate_raw = rsv_month_positive/ rsv_month_tests,
+      total_days = sum(days_in_week),
+      num_day_in_month = lubridate::days_in_month(lubridate::make_date(year = first(year), 
+                                                                       month = first(month), 
+                                                                       day = 1)),
+      .groups = "drop"
+    ) %>%
+    arrange(year, month)
+}
+
+
+data_rsv_detrend_month <- monthly_summary_rsv(data_rsv_detrend)
+
+
+identical(data_rsv_detrend_month$total_days, data_rsv_detrend_month$num_day_in_month)
+
+sum(data_rsv_detrend_month$total_days != data_rsv_detrend_month$num_day_in_month) # 2 rows different...let's see
+
+data_rsv_detrend_month_check <- data_rsv_detrend_month %>% filter(total_days != num_day_in_month) # The difference happened in the first week (end date: 2005-07-02, so the first row in the data_rsv_detrend_month2 is 2005-6, which only has 5 days ) and last week (end date: 2022-6-25) of the whole data 
+
+```
+
+## 3.2 read the flu data, clean and detrend it
+
+```{r}
+
+data_flu_bef_2015_w39 <- read_csv('data/WHO_NREVSS_Combined_prior_to_2015_16.csv', skip = 1) 
+
+data_flu_after_2015_w40_ph <- read_csv('data/WHO_NREVSS_Public_Health_Labs.csv', skip = 1)
+
+data_flu_after_2015_w40_clinical <- read_csv('data/WHO_NREVSS_Clinical_Labs.csv', skip = 1)
+
+names(data_flu_bef_2015_w39)
+
+data_flu_bef_2015_w39 <- data_flu_bef_2015_w39 %>% mutate(pos = rowSums(select(., `A (2009 H1N1)`:`A (H5)`)), check_percent = pos/`TOTAL SPECIMENS` * 100)
+
+max(data_flu_bef_2015_w39$`PERCENT POSITIVE` - data_flu_bef_2015_w39$check_percent,na.rm = TRUE) # should be minimal
+
+names(data_flu_bef_2015_w39)
+
+data_flu_bef_2015_w39_link <- data_flu_bef_2015_w39 %>% dplyr::select(YEAR, WEEK, `TOTAL SPECIMENS`, pos, check_percent) %>% rename(total = `TOTAL SPECIMENS`, percent = check_percent)
+
+names(data_flu_after_2015_w40_ph)
+
+data_flu_after_2015_w40_ph_link <- data_flu_after_2015_w40_ph %>% 
+  mutate(pos = rowSums(select(., `A (2009 H1N1)` : `A (H5)`)), check_percent = pos/`TOTAL SPECIMENS` * 100) %>% 
+  dplyr::select(YEAR, WEEK, `TOTAL SPECIMENS`, pos, check_percent) %>%
+  rename(total_ph = `TOTAL SPECIMENS`, pos_ph = pos, check_percent_ph = check_percent)
+
+names(data_flu_after_2015_w40_clinical)
+
+data_flu_after_2015_w40_clinical_link <- data_flu_after_2015_w40_clinical %>% mutate(pos = rowSums(select(., `TOTAL A` : `TOTAL B`)), check_percent = pos/`TOTAL SPECIMENS` * 100) %>% dplyr::select(YEAR, WEEK, `TOTAL SPECIMENS`, pos, check_percent) %>% rename(total_clinical = `TOTAL SPECIMENS`, pos_clinical = pos, check_percent_clinical = check_percent)
+
+max(data_flu_after_2015_w40_clinical_link$check_percent_clinical - data_flu_after_2015_w40_clinical$`PERCENT POSITIVE`) # should be minimal
+
+names(data_flu_after_2015_w40_clinical_link)
+names(data_flu_after_2015_w40_ph_link)
+nrow(data_flu_after_2015_w40_clinical_link)
+nrow(data_flu_after_2015_w40_ph_link)
+
+data_flu_after_2015_w40_join <- full_join(data_flu_after_2015_w40_ph_link, data_flu_after_2015_w40_clinical_link, by = c("YEAR", "WEEK")) %>% mutate(total = total_ph + total_clinical, pos = pos_ph + pos_clinical, percent = pos/ total * 100)
+
+names(data_flu_after_2015_w40_join)
+
+names(data_flu_bef_2015_w39_link)
+
+data_flu_after_2015_w40_join_link <- data_flu_after_2015_w40_join[names(data_flu_bef_2015_w39_link)]
+
+data_flu_all <-rbind(data_flu_bef_2015_w39_link, data_flu_after_2015_w40_join_link)
+
+
+```
+
+## 3.3 data aggregate
+
+
+```{r}
+
+data_flu_detrend <- data_flu_all %>%
+  mutate(
+    # CDC date 
+    week_end = MMWRweek2Date(MMWRyear = YEAR, MMWRweek = WEEK) + days(6),
+    week_start = week_end - days(6),
+    week_start_check = MMWRweek2Date(MMWRyear = YEAR, MMWRweek = WEEK),
+    flu_N_test_52w = slide_dbl(total, mean,
+                              .before = as.integer((52-1) / 2),
+                              .after = as.integer((52-1) / 2),
+                              .complete = FALSE),
+    flu_standardized_case_count = (pos/flu_N_test_52w) * 100
+  )
+
+identical(data_flu_detrend$week_start, data_flu_detrend$week_start_check) # should be T
+
+
+# Flu monthly summary function
+monthly_summary_flu <- function(df) {
+  df %>%
+    mutate(
+      month_start = month(week_start),
+      month_end = month(week_end),
+      year_start = year(week_start),
+      year_end = year(week_end)
+    ) %>%
+    {bind_rows(
+      # week in the same month
+      filter(., month_start == month_end) %>%
+        mutate(
+          month = month_start,
+          year = year_start,
+          days_in_week = 7
+        ),
+      # first part of week in different month
+      filter(., month_start != month_end) %>%
+        mutate(
+          month = month_start,
+          year = year_start,
+          days_in_week = as.numeric(ceiling_date(week_start, "month") - week_start),
+          total = total * days_in_week/7,
+          pos = pos * days_in_week/7,
+          flu_standardized_case_count = flu_standardized_case_count
+        ),
+      # second part of week in different month
+      filter(., month_start != month_end) %>%
+        mutate(
+          month = month_end,
+          year = year_end,
+          days_in_week = 7 - as.numeric(ceiling_date(week_start, "month") - week_start),
+          total = total * days_in_week/7,
+          pos = pos * days_in_week/7,
+          flu_standardized_case_count = flu_standardized_case_count
+        )
+    )} %>%
+    # monthly weighted average
+    group_by(year, month) %>%
+    summarize(
+      flu_month_tests = sum(total, na.rm = TRUE),
+      flu_month_positive = sum(pos, na.rm = TRUE),
+      flu_pos_rate_raw = flu_month_positive/ flu_month_tests,
+      flu_standardized_case_month_ave = weighted.mean(flu_standardized_case_count, 
+                                                     days_in_week, 
+                                                     na.rm = TRUE),
+      total_days = sum(days_in_week),
+      num_day_in_month = lubridate::days_in_month(lubridate::make_date(year = first(year), 
+                                                                       month = first(month), 
+                                                                       day = 1)),
+      .groups = "drop"
+    ) %>%
+    arrange(year, month)
+}
+
+# monthly summary flu
+data_flu_detrend_month <- monthly_summary_flu(data_flu_detrend)
+sum(data_flu_detrend_month$total_days != data_flu_detrend_month$num_day_in_month) # also 2 month different
+
+data_flu_detrend_month_check <- data_flu_detrend_month %>% filter(total_days != num_day_in_month)  # Also the first day and the last day
+
+# 3. combine flu and rsv and check
+data_rsv_flu_detrend_month_compare <- inner_join(
+  data_rsv_detrend_month,
+  data_flu_detrend_month,
+  by = c("year", "month")
+) %>%
+  filter(year >= 2014)
+
+# 4. check the difference in total days
+print(sum(data_rsv_flu_detrend_month_compare$total_days.x != 
+          data_rsv_flu_detrend_month_compare$total_days.y)) # 1 day difference
+
+data_rsv_flu_detrend_month_compare_check <- data_rsv_flu_detrend_month_compare %>% filter(total_days.x != total_days.y)# It is 2022-6, because RSV data only have 25 days, flu data have the complete 30 days. Otherwise they are all the same!
+
+
+sum(data_rsv_flu_detrend_month_compare$num_day_in_month.x != data_rsv_flu_detrend_month_compare$num_day_in_month.y) # should be 0, as this is theoretical number of days
+```
+
+
+
+```{r}
+
+  data_rsv_detrend_month_link <- data_rsv_detrend_month %>% dplyr::select(year, month, rsv_standardized_case_month_ave, num_day_in_month, rsv_month_positive, rsv_pos_rate_raw) %>% mutate(year = as_factor(year))
+  
+  data_flu_detrend_month_link <- data_flu_detrend_month %>% dplyr::select(year, month, flu_standardized_case_month_ave, num_day_in_month, flu_month_positive, flu_pos_rate_raw) %>% mutate(year = as_factor(year))
+  
+```
+
+## 3.4 Monthly and weekly time series
+
+```{r}
+plot_monthly_detrended <- function(data, 
+                                 value_col,  
+                                 disease = c("RSV", "Flu"),  
+                                 start_date = "2014-01-01",
+                                 end_date = "2022-12-31") {
+  
+  disease <- match.arg(disease)  
+  
+  data %>%
+    mutate(date = as.Date(paste(year, month, "01", sep="-"))) %>%
+    filter(date >= start_date & date <= end_date) %>%
+    ggplot(aes(x = date, y = !!sym(value_col))) +  
+    geom_line() +
+    theme_classic() +
+    labs(
+      title = paste(disease, "Monthly Detrended Cases"),
+      x = "Date",
+      y = "Standardized Case Count"
+    ) +
+    theme(
+      plot.title = element_text(hjust = 0.5),
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    ) +
+    scale_x_date(date_breaks = "6 months", date_labels = "%Y-%m")
+}
+
+
+rsv_plot <- plot_monthly_detrended(
+  data = data_rsv_detrend_month_link,
+  value_col = "rsv_standardized_case_month_ave",
+  disease = "RSV"
+)
+
+flu_plot <- plot_monthly_detrended(
+  data = data_flu_detrend_month_link,
+  value_col = "flu_standardized_case_month_ave",
+  disease = "Flu"
+)
+
+
+rsv_plot2 <- plot_monthly_detrended(
+  data = data_rsv_detrend_month_link,
+  value_col = "rsv_month_positive",
+  disease = "RSV"
+)
+
+flu_plot2 <- plot_monthly_detrended(
+  data = data_flu_detrend_month_link,
+  value_col = "flu_month_positive",
+  disease = "Flu"
+)
+```
+
+
+```{r}
+plot_raw_vs_detrended <- function(data, 
+                                 raw_col,     
+                                 detrend_col,  
+                                 disease = c("RSV", "Flu"),
+                                 start_date = "2014-01-01",
+                                 end_date = "2022-12-31") {
+  
+  disease <- match.arg(disease)
+  
+  plot_data <- data %>%
+    mutate(date = as.Date(paste(year, month, "01", sep="-"))) %>%
+    filter(date >= start_date & date <= end_date) %>%
+    select(date, raw = !!sym(raw_col), detrended = !!sym(detrend_col)) %>%
+    pivot_longer(
+      cols = c(raw, detrended),
+      names_to = "type",
+      values_to = "value"
+    )
+  
+  ggplot(plot_data, aes(x = date, y = value)) +
+    geom_line() +
+    facet_wrap(~type, scales = "free_y", 
+               labeller = labeller(type = c(
+                 raw = "Raw Case Count", 
+                 detrended = "Detrended Case Count"))) +
+    theme_classic() +
+    labs(
+      title = paste(disease, "Cases Comparison"),
+      x = "Date",
+      y = "Count"
+    ) +
+    theme(
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(size = 12),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5)
+    ) +
+    scale_x_date(date_breaks = "6 months", date_labels = "%Y-%m")
+}
+
+rsv_comparison <- plot_raw_vs_detrended(
+  data = data_rsv_detrend_month_link,
+  raw_col = "rsv_month_positive",
+  detrend_col = "rsv_standardized_case_month_ave",
+  disease = "RSV"
+)
+#ggsave(rsv_comparison, file = "figure/1026/rsv_comparison.jpg", width = 20, height = 10, unit = "cm")
+flu_comparison <- plot_raw_vs_detrended(
+  data = data_flu_detrend_month_link,
+  raw_col = "flu_month_positive",
+  detrend_col = "flu_standardized_case_month_ave",
+  disease = "Flu"
+)
+#ggsave(flu_comparison, file = "figure/1026/flu_comparison.jpg", width = 20, height = 10, unit = "cm")
+```
+
+
+```{r}
+plot_raw_vs_detrended <- function(data, 
+                                raw_col,      # Column name for raw values
+                                detrend_col,  # Column name for detrended values
+                                pos_rate_col, # Column name for positivity rate
+                                disease = c("RSV", "Flu"),
+                                start_date = "2014-01-01",
+                                end_date = "2022-12-31") {
+ 
+ disease <- match.arg(disease)
+ 
+ # Prepare data in long format
+ plot_data <- data %>%
+   mutate(date = as.Date(paste(year, month, "01", sep="-"))) %>%
+   filter(date >= start_date & date <= end_date) %>%
+   select(date, 
+          raw = !!sym(raw_col), 
+          detrended = !!sym(detrend_col),
+          pos_rate = !!sym(pos_rate_col)) %>%
+   pivot_longer(
+     cols = c(raw, detrended, pos_rate),
+     names_to = "type",
+     values_to = "value"
+   )
+ 
+ # Create plot with three panels
+ ggplot(plot_data, aes(x = date, y = value)) +
+   geom_line() +
+   facet_wrap(~type, 
+              scales = "free_y", 
+              ncol = 1,        # Arrange panels vertically
+              labeller = labeller(type = c(
+                raw = "Raw Case Count",
+                detrended = "Detrended Case Count",
+                pos_rate = "Positivity Rate (%)"
+              ))) +
+   theme_classic() +
+   labs(
+     title = paste(disease, "Cases Comparison"),
+     x = "Date",
+     y = "Count"
+   ) +
+   theme(
+     strip.background = element_rect(fill = "white"),
+     strip.text = element_text(size = 12),
+     axis.text.x = element_text(angle = 45, hjust = 1),
+     plot.title = element_text(hjust = 0.5)
+   ) +
+   scale_x_date(date_breaks = "6 months", 
+                date_labels = "%Y-%m")
+}
+
+rsv_comparison <- plot_raw_vs_detrended(
+  data = data_rsv_detrend_month_link,
+  raw_col = "rsv_month_positive",
+  detrend_col = "rsv_standardized_case_month_ave",
+  pos_rate_col = "rsv_pos_rate_raw",
+  disease = "RSV"
+)
+#ggsave(rsv_comparison, file = "figure/1026/rsv_comparison2.jpg", width = 20, height = 30, unit = "cm")
+
+
+flu_comparison <- plot_raw_vs_detrended(
+  data = data_flu_detrend_month_link,
+  raw_col = "flu_month_positive",
+  detrend_col = "flu_standardized_case_month_ave",
+  pos_rate_col = "flu_pos_rate_raw",
+  disease = "Flu"
+)
+#ggsave(flu_comparison, file = "figure/1026/flu_comparison2.jpg", width = 20, height = 30, unit = "cm")
+
+
+```
+
+
+## 3.5 Update the death_plot_func
+
+In this version of the function, we allow the change of analysis database, as well as merging the rsv and flu data after we summarize the analysis database
+
+
+
+
+
+```{r}
+
+
+death_plot_fun_rv_adjust <- function(data_analysis = pneumo.deaths.adult, disease='ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6', fill_ribbon=   "#565759", col_dash_line =   "#FF0000", rv_data = NULL, ...){
+  
+  grouping_vars <- quos(...)
+  disease_sym <- ensym(disease)
+  
+  plot.ds1 <- data_analysis %>% 
+    filter(!!disease_sym == 1) %>%
+    group_by( !!!grouping_vars ) %>%
+    summarize(N_deaths=n()) %>%
+    ungroup() %>%
+    mutate(year=as.factor(year),month=as.numeric(as.character(month))) %>%
+    tidyr::complete( !!!grouping_vars, fill=list(N_deaths=0) ) %>%
+    ungroup()
+    
+  
+  if(!is.null(rv_data)) {
+ plot.ds1 <- left_join(plot.ds1, rv_data, by = c("year", "month")) %>%
+   filter(complete.cases(.))  # because, for RSV, there will be 6 months empty data, we need to remove the 6 months
+}
+  
+  plot.cols <- c(rep('gray85',6),'#66c2a5', '#fc8d62','#8da0cb')
+  
+  p1 <- ggplot(plot.ds1, aes(x=month, y=N_deaths, group=year, col=year)) +
+    geom_line() +
+    theme_classic() +
+    scale_color_manual(values=plot.cols)+
+    ylim(0, NA)
+  
+  
+  ds1 <- plot.ds1 %>%
+    mutate(date=as.Date(paste(year, month, '01', sep='-')),
+           qtr=as.factor(lubridate::quarter(date)),
+           index= interval('2014-01-01', date) %/% months(1) ,
+           sin12 = sin(2*pi*index/12),
+           cos12 = cos(2*pi*index/12),
+           sin6 = sin(2*pi*index*2/12),
+           cos6 = cos(2*pi*index*2/12),
+           year=as.numeric(year),
+           N_deaths_pre= if_else(date >='2020-03-01', NA_real_,N_deaths),
+           log_offset=log(num_day_in_month))
+  
+  
+  
+  
+  #Poisson
+  form1 <- as.formula(reg.form)
+  mod1 <- glm(reg.form,
+              data=ds1, family='poisson', offset = log_offset)
+  
+  preds <- pred_interval(mod=mod1,ds.glm=ds1)
+  
+  ds1a <- cbind.data.frame(ds1,preds)%>%
+    mutate(rr_median=N_deaths/pred_median, rr_lcl=N_deaths/pred_lcl, rr_ucl=N_deaths/pred_ucl) %>%
+    ungroup()
+  
+  p1_a <- ggplot(data=ds1a, aes(x=date, y=N_deaths)) +
+    geom_line() +
+    theme_classic()+
+    geom_ribbon(aes(ymin=pred_lcl, ymax=pred_ucl), alpha=0.2, fill = fill_ribbon)+
+    geom_line(aes(x=date, y=pred_median), col=col_dash_line, lty=2, alpha=0.6)+
+   geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), 
+               size = 1,           
+               color = "#EFC000FF",       
+               linetype = 'dashed',    
+               alpha = 0.8)  +
+
+        ylab('N deaths')+
+    ggtitle(disease) +
+   scale_x_date(limits = as.Date(c('2013-09-01', '2023-03-01')),
+                breaks = as.Date(paste0(2014:2023, "-01-01")),  
+                date_labels = "%Y")
+  
+  rr.plot <- 
+    ggplot(data=ds1a, aes(x=date, y=rr_median)) +
+    geom_line() +
+    theme_classic()+
+    geom_ribbon(aes(ymin=rr_lcl, ymax=rr_ucl), alpha=0.2, fill = fill_ribbon)+
+    # ylim(0.5,2.2) +
+    coord_cartesian(ylim = c(0.5, 2.2))+
+    geom_hline(yintercept=1, lty=2, col='red')+
+   geom_vline(xintercept= as.Date(c('2020-03-01','2021-08-01')), 
+               size = 1,           
+               color = "#EFC000FF",       
+               linetype = 'dashed',    
+               alpha = 0.8)  +
+   scale_x_date(limits = as.Date(c('2013-09-01', '2023-03-01')),
+                breaks = as.Date(paste0(2014:2023, "-01-01")),  
+                date_labels = "%Y")
+    
+      out.list = list('plot1'=p1, 'ts'=plot.ds1,'ts.plot'=p1_a,'rr.plot'=rr.plot,'mod1'=mod1, 'rr_data' = ds1a)
+  
+  return(out.list)
+}
+
+
+```
+
+
+## 3.6 Pneumococcal Disease
+
+```{r}
+pneumococcal_all <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 ', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month)
+
+pneumococcal_all_plot <- pneumococcal_all$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "A. Pneumococcal Disease (Base model)") + theme_pubr() 
+
+pneumococcal_all_plot_rr <- pneumococcal_all$rr.plot +
+  labs(x = "Date", y= "RR", title = "D. RR: Pneumococcal Disease (Base model)") + theme_pubr() 
+
+pneumococcal_all_flu <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + flu_standardized_case_month_ave', fill_ribbon =   "#1f5189", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month)
+
+pneumococcal_all_flu_plot <- pneumococcal_all_flu$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "B. Pneumococcal Disease (Adjusted for influenza trend)") + theme_pubr() 
+
+pneumococcal_all_flu_plot_rr <- pneumococcal_all_flu$rr.plot +
+  labs(x = "Date", y= "RR", title = "E. RR: Pneumococcal Disease (Adjusted for influenza trend)") + theme_pubr() 
+
+pneumococcal_all_rsv <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + rsv_standardized_case_month_ave', fill_ribbon =   "#00756f", col_dash_line =   "#FF0000",rv_data = data_rsv_detrend_month_link, year,month)
+
+pneumococcal_all_rsv_plot <- pneumococcal_all_rsv$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "C. Pneumococcal Disease (Adjusted for RSV trend)") + theme_pubr() 
+
+pneumococcal_all_rsv_plot_rr <- pneumococcal_all_rsv$rr.plot +
+  labs(x = "Date", y= "RR", title = "F. RR: Pneumococcal Disease (Adjusted for RSV trend)") + theme_pubr() 
+
+fig1 <- (pneumococcal_all_plot + pneumococcal_all_plot_rr) / (pneumococcal_all_flu_plot + pneumococcal_all_flu_plot_rr)/ (pneumococcal_all_rsv_plot  + pneumococcal_all_rsv_plot_rr)
+
+#ggsave("figure/clean/fig1.png", fig1, width = 40, height = 35, unit = "cm")
+
+```
+
+
+
+
+
+## 3.7 Pneumococcal pneumonia
+
+```{r}
+pneumococcal_pneum_all <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal_pneum',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 ', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month)
+
+pneumococcal_pneum_all_plot <- pneumococcal_pneum_all$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "A. Pneumococcal Pneumonia (Base model)") + theme_pubr() 
+
+pneumococcal_pneum_all_plot_rr <- pneumococcal_pneum_all$rr.plot +
+  labs(x = "Date", y= "RR", title = "D. RR: Pneumococcal Pneumonia (Base model)") + theme_pubr() 
+
+pneumococcal_pneum_all_flu <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal_pneum',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + flu_standardized_case_month_ave', fill_ribbon =   "#1f5189", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month)
+
+pneumococcal_pneum_all_flu_plot <- pneumococcal_pneum_all_flu$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "B. Pneumococcal Pneumonia (Adjusted for influenza trend)") + theme_pubr() 
+
+pneumococcal_pneum_all_flu_plot_rr <- pneumococcal_pneum_all_flu$rr.plot +
+  labs(x = "Date", y= "RR", title = "E. RR: Pneumococcal Pneumonia (Adjusted for influenza trend)") + theme_pubr() 
+
+pneumococcal_pneum_all_rsv <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal_pneum',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + rsv_standardized_case_month_ave', fill_ribbon =   "#00756f", col_dash_line =   "#FF0000",rv_data = data_rsv_detrend_month_link, year,month)
+
+pneumococcal_pneum_all_rsv_plot <- pneumococcal_pneum_all_rsv$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "C. Pneumococcal Pneumonia (Adjusted for RSV trend)") + theme_pubr() 
+
+pneumococcal_pneum_all_rsv_plot_rr <- pneumococcal_pneum_all_rsv$rr.plot +
+  labs(x = "Date", y= "RR", title = "F. RR: Pneumococcal Pneumonia (Adjusted for RSV trend)") + theme_pubr() 
+
+figs1 <- (pneumococcal_pneum_all_plot + pneumococcal_pneum_all_plot_rr) / (pneumococcal_pneum_all_flu_plot + pneumococcal_pneum_all_flu_plot_rr)/ (pneumococcal_pneum_all_rsv_plot + pneumococcal_pneum_all_rsv_plot_rr ) 
+          
+#ggsave("figure/clean/figs1.png", figs1, width = 40, height = 35, unit = "cm")
+
+```
+
+
+
+## 3.8 Non-resp IPD
+
+```{r}
+non_resp_ipd_all <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='non_resp_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 ', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month)
+
+non_resp_ipd_all_plot <- non_resp_ipd_all$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "A. Non-respiratory IPD (Base model)") + theme_pubr() 
+
+non_resp_ipd_all_plot_rr <- non_resp_ipd_all$rr.plot +
+  labs(x = "Date", y= "RR", title = "D. RR: Non-respiratory IPD (Base model)") + theme_pubr() 
+
+non_resp_ipd_all_flu <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='non_resp_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + flu_standardized_case_month_ave', fill_ribbon =    "#1f5189", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month)
+
+non_resp_ipd_all_flu_plot <- non_resp_ipd_all_flu$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "B. Non-respiratory IPD (Adjusted for influenza trend)") + theme_pubr() 
+
+non_resp_ipd_all_flu_plot_rr <- non_resp_ipd_all_flu$rr.plot +
+  labs(x = "Date", y= "RR", title = "E. RR: Non-respiratory IPD (Adjusted for influenza trend)") + theme_pubr() 
+
+
+non_resp_ipd_all_rsv <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='non_resp_ipd',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + rsv_standardized_case_month_ave', fill_ribbon =   "#00756f", col_dash_line =   "#FF0000",rv_data = data_rsv_detrend_month_link, year,month)
+
+non_resp_ipd_all_rsv_plot <- non_resp_ipd_all_rsv$ts.plot +
+  labs(x = "Date", y= "Number of deaths", title = "C. Non-respiratory IPD (Adjusted for RSV trend)") + theme_pubr() 
+non_resp_ipd_all_rsv_plot_rr <- non_resp_ipd_all_rsv$rr.plot +
+  labs(x = "Date", y= "RR", title = "F. RR: Non-respiratory IPD (Adjusted for RSV trend)") + theme_pubr() 
+
+
+figs2 <- (non_resp_ipd_all_plot + non_resp_ipd_all_plot_rr)/ (non_resp_ipd_all_flu_plot + non_resp_ipd_all_flu_plot_rr) / (non_resp_ipd_all_rsv_plot + non_resp_ipd_all_rsv_plot_rr)
+
+#ggsave("figure/clean/figs2.png", figs2, width = 40, height = 35, unit = "cm")
+
+```
+
+
+# 4. heat map stratified by age
+
+
+## 4.1 Create a function to make heatmap
+
+```{r}
+
+heatmap_func <- function(dataheat, cat_var, title_y, titleheat, min_logrr = NULL, max_logrr = NULL) {
+
+dataheat <- dataheat %>% mutate(year_heat = year(date), log_rr =log(rr_median)) %>% filter(year_heat >=2020)
+
+heatrr <- ggplot(dataheat, aes(x = month, y = .data[[cat_var]], fill = log_rr)) +
+  geom_tile(color = "white", size = 0.5) +
+  scale_fill_viridis(limits = c(min_logrr, max_logrr))+
+  facet_wrap2(~ year_heat, ncol = 3, scales = "free_x", strip.position = "bottom") +
+  scale_x_continuous(
+    breaks = 1:12
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = rel(0.9)),
+    legend.position = c(1.1,0.5),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text = element_text(size = 12, face = "bold", margin = margin(5, 0, 5, 0)),
+    panel.spacing.x = unit(0.2, "lines"),
+    panel.spacing.y = unit(1, "lines"),
+    aspect.ratio = 0.6
+  ) +
+  labs(x = NULL, y = title_y, title = titleheat, fill = "log(RR)")
+
+return(heatrr)}
+
+```
+
+
+## 4.2 Making the heatmap
+
+ B. Pneumococcal Disease (Adjusted for influenza trend)  C. Pneumococcal Disease (Adjusted for RSV trend)
+
+```{r}
+heat_age_pneumococcal_all <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  +agec', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month, agec)
+
+heat_age_pneumococcal_all_age_rr <-  heat_age_pneumococcal_all$rr_data
+
+heat_age_a <- heatmap_func(dataheat = heat_age_pneumococcal_all_age_rr, cat_var = "agec", title_y = "Age group", titleheat = "A. Age (Base model)")
+
+heat_age_pneumococcal_all_flu <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + flu_standardized_case_month_ave + agec', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month, agec)
+
+heat_age_pneumococcal_all_flu_rr <-  heat_age_pneumococcal_all_flu$rr_data
+
+heat_age_b <- heatmap_func(dataheat = heat_age_pneumococcal_all_flu_rr, cat_var = "agec", title_y = "Age group", titleheat = "A. Age (Adjusted for influenza trend)")
+
+heat_age_pneumococcal_all_rsv <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + rsv_standardized_case_month_ave + agec', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_rsv_detrend_month_link, year,month, agec)
+
+heat_age_pneumococcal_all_rsv_rr <-  heat_age_pneumococcal_all_rsv$rr_data
+
+heat_age_c <- heatmap_func(dataheat = heat_age_pneumococcal_all_rsv_rr, cat_var = "agec", title_y = "Age group", titleheat ="A. Age (Adjusted for RSV trend)")
+
+
+
+```
+
+
+
+
+# 5. heat map stratified by Education
+
+
+Education--2.5% missing
+
+Education (1989 revision)
+00 No formal education
+00-08Years of elementary school
+09 1 year of high school
+10 2 years of high school
+11 3 years of high school
+12 4 years of high school
+13 1 year of college
+14 2 years of college
+15 3 years of college
+16 4 years of college
+17 5 or more years of college
+99 Not stated 
+
+Education (2003 revision)
+Field is blank for registration areas that are using the 1989 revision format of the item.
+1 ... 8th grade or less
+2 ... 9 - 12th grade, no diploma
+3 ... high school graduate or GED completed
+4 ... some college credit, but no degree
+5 ... Associate degree
+6 ... Bachelor’s degree
+7 ... Master’s degree
+8 ... Doctorate or professional degree
+9 ... Unknown 
+
+Education reporting flag
+0 1989 revision of education item on certificate
+1 2003 revision of education item on certificate
+2 no education item on certificate
+
+education_recode: 1=HS or less; 2= some college or more; 99=missing
+
+Note: This part is restricted to people with non-missing edu info
+
+
+
+```{r}
+table(pneumo.deaths.adult$education1989, useNA = "always")
+table(pneumo.deaths.adult$education2003, useNA = "always")
+
+pneumo.deaths.adult_edu <- pneumo.deaths.adult %>%
+  mutate(education_hs = if_else(education1989 %in% c('00','01','02','03','04','05','06','07','08','09','10','11','12') |education2003 %in% c('1','2','3') ,1,0 ),
+         education_college = ifelse( education1989 %in% c('13','14','15','16','17') | education2003 %in% c('4','5','6','7','8'),1,0),
+         education_missing= ifelse( education1989 %in% c('99') | education2003 %in% c('9'),1,0),
+         education_recode = ifelse(education_hs==1,1, ifelse(education_college==1,2,99) )
+       
+) %>%
+  filter(education_recode %in% c(1,2)) %>%
+  mutate(education_recode=factor(education_recode,c(1,2), c("High school and lower", "College and higher"))
+)
+  
+nrow(pneumo.deaths.adult_edu) # 8383
+NROW(pneumo.deaths.adult)#8590 ~ 150 people are removed
+
+heat_edu_pneumococcal_all <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult_edu, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  +education_recode', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month, education_recode)
+
+heat_edu_pneumococcal_all_age_rr <-  heat_edu_pneumococcal_all$rr_data
+
+heat_edu_a <- heatmap_func(dataheat = heat_edu_pneumococcal_all_age_rr, cat_var = "education_recode", title_y = "Education group", titleheat = "B. Education (Base model)")
+
+heat_edu_pneumococcal_all_flu <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult_edu, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + flu_standardized_case_month_ave + education_recode', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month, education_recode)
+
+heat_edu_pneumococcal_all_flu_rr <-  heat_edu_pneumococcal_all_flu$rr_data
+
+heat_edu_b <- heatmap_func(dataheat = heat_edu_pneumococcal_all_flu_rr, cat_var = "education_recode", title_y = "Education group", titleheat = "B. Education (Adjusted for influenza trend)")
+
+heat_edu_pneumococcal_all_rsv <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult_edu, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + rsv_standardized_case_month_ave + education_recode', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_rsv_detrend_month_link, year,month, education_recode)
+
+heat_edu_pneumococcal_all_rsv_rr <-  heat_edu_pneumococcal_all_rsv$rr_data
+
+heat_edu_c <- heatmap_func(dataheat = heat_edu_pneumococcal_all_rsv_rr, cat_var = "education_recode", title_y = "Education group", titleheat ="B. Education (Adjusted for RSV trend)")
+
+
+
+
+
+```
+
+# 6. heat map stratified by Race_ethnicity
+
+Due to the sparcity of data, we re-categorize race ethnicity into white, black, other 
+
+```{r}
+table(pneumo.deaths.adult$race_recode_new, useNA = "always")
+pneumo.deaths.adult <- pneumo.deaths.adult %>% mutate(race_recode_analysis = if_else(!race_recode_new %in% c("White", 
+                                                                                                               "Black"), "Other", race_recode_new), race_recode_analysis = fct_relevel(race_recode_analysis, c("White", "Black", "Other"))) 
+
+table(pneumo.deaths.adult$race_recode_analysis, useNA = "always")
+
+```
+```{r}
+
+heat_race_pneumococcal_all <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6  +race_recode_analysis', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month, race_recode_analysis)
+
+heat_race_pneumococcal_all_age_rr <-  heat_race_pneumococcal_all$rr_data
+
+heat_race_a <- heatmap_func(dataheat = heat_race_pneumococcal_all_age_rr, cat_var = "race_recode_analysis", title_y = "Race/ethnicity", titleheat = "C. Race/ethnicity (Base model)")
+
+heat_race_pneumococcal_all_flu <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + flu_standardized_case_month_ave + race_recode_analysis', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_flu_detrend_month_link, year,month, race_recode_analysis)
+
+heat_race_pneumococcal_all_flu_rr <-  heat_race_pneumococcal_all_flu$rr_data
+
+heat_race_b <- heatmap_func(dataheat = heat_race_pneumococcal_all_flu_rr, cat_var = "race_recode_analysis", title_y = "Race/ethnicity", titleheat = "C. Race/ethnicity (Adjusted for influenza trend)")
+
+heat_race_pneumococcal_all_rsv <-  death_plot_fun_rv_adjust(data_analysis = pneumo.deaths.adult, disease='pneumococcal',reg.form='N_deaths_pre ~ index+ sin12+cos12 +sin6 +cos6 + rsv_standardized_case_month_ave + race_recode_analysis', fill_ribbon =   "#565759", col_dash_line =   "#FF0000",rv_data = data_rsv_detrend_month_link, year,month, race_recode_analysis)
+
+heat_race_pneumococcal_all_rsv_rr <-  heat_race_pneumococcal_all_rsv$rr_data
+
+heat_race_c <- heatmap_func(dataheat = heat_race_pneumococcal_all_rsv_rr, cat_var = "race_recode_analysis", title_y = "Race/ethnicity", titleheat ="C. Race/ethnicity (Adjusted for RSV trend)")
+
+
+```
+# 7. Combine the heatmap figures
+
+```{r}
+fig2 <- heat_age_a / heat_edu_a / heat_race_a
+
+figs3 <- heat_age_b / heat_edu_b / heat_race_b
+
+figs4 <- heat_age_c / heat_edu_c / heat_race_c
+
+#ggsave(fig2, file = "figure/clean/fig2.png", height = 20, width = 33 ,unit = "cm")
+
+#ggsave(figs3, file = "figure/clean/figs3.png", height = 20, width = 33 ,unit = "cm")
+
+#ggsave(figs4, file = "figure/clean/figs4.png", height = 20, width = 33 ,unit = "cm")
+
+```
+
+
+# 8. Lasso
+
+
+As we will include education factor into the lasso regression model, we need to exclude people with missing education, or else "missing" education will also be a risk factor.
+
+
+Also, as COVID-19 is sure to increase, so we may not include COVID-19 (INF012) into the model.
+```{r}
+
+#install.packages("remotes")
+#remotes::install_github("HunterRatliff1/hcup")
+library(hcup)
+
+# Just check
+find_longest_string <- function(string_vector) {
+  max_length <- max(nchar(string_vector))
+  return(string_vector[nchar(string_vector) == max_length][1])
+}
+longest_icd <- find_longest_string(pneumo.deaths.adult$all_icd) # so the longest icd code has 15 ICDs
+
+#table(pneumo.deaths.adult$pneumococcal, useNA = "always")
+#table(pneumo.deaths.adult_edu$education_recode)
+pneumococcal_deaths <- pneumo.deaths.adult_edu %>%
+  filter(pneumococcal==1) %>%
+  mutate(date = as.Date(paste(year,month,'01', sep='-')),
+         ID=row_number()
+        ) %>%
+  separate(all_icd, paste0('icd',1:21), sep='_', fill='right') %>%
+  dplyr::select(ID, date,year, month, sex,education_recode, agec, race_recode_new, starts_with('icd') ) %>%
+  reshape2::melt(., id.vars=c('ID','date','year', 'month', 'sex','education_recode', 'agec', 'race_recode_new')) %>%
+filter(!is.na(value))
+
+#test <- ccsr_dx(pneumococcal_deaths$value)
+test <- classify_ccsr_dx1(pneumococcal_deaths$value,setting = "inpatient")
+class(test)
+test2 <- lapply(test, function(X) paste(X, collapse='_')) %>% unlist()
+class(test2)
+
+longest_ccsr <- find_longest_string(test)
+longest_ccsr2 <- find_longest_string(test2) # They all have one category
+
+pneumococcal_deaths2 <- pneumococcal_deaths %>%
+  mutate(ccsr = test2 ) %>%
+  separate(ccsr, paste0('ccsrcat',1:3), sep='_', fill='right') %>%
+    dplyr::select(ID, year,date, month, sex,education_recode, agec, race_recode_new, starts_with('ccsrcat') ) %>%
+  reshape2::melt(., id.vars=c('ID','year','date', 'month', 'sex','education_recode', 'agec', 'race_recode_new')) %>%
+  filter(!is.na(value) & value !='NA') %>%
+  dplyr::select(-variable) %>%
+  rename(ccsr=value) %>%
+  distinct() %>%
+  group_by(ID, year,date, month, sex,education_recode, agec, race_recode_new) %>%
+  summarize( ccsr = paste(ccsr, collapse='_')) %>%
+  filter(!is.na(sex) & !is.na(education_recode) & !is.na(agec) & !is.na(race_recode_new))
+
+all_ccsr <- unique(unlist(str_split(paste(pneumococcal_deaths2$ccsr, collapse='_'),'_')))
+
+big.mat_full <- pbsapply(all_ccsr, function(X) var1 = grepl(X, pneumococcal_deaths2$ccsr) , simplify='array')
+
+
+
+
+library(glmnet)
+
+mod.ds <-  big.mat_full %>%
+  as.data.frame() %>%
+  mutate(Y = if_else(pneumococcal_deaths2$date >= '2020-03-01',1,0))
+
+x.covar <-   model.matrix( ~agec + sex +education_recode + race_recode_new  ,data=pneumococcal_deaths2) 
+x.covar <- x.covar[,-1]
+
+
+X <- mod.ds %>% 
+  dplyr::select(-Y) %>%
+  as.matrix() %>%
+  cbind(.,x.covar)
+
+crcs_freq <- apply(X,2, sum)
+X_filt <- X[,crcs_freq>=100]
+X_filt <- subset(X_filt, select = -INF012) # remove COVID-19
+
+crcs_freq_filt <- apply(X_filt,2, sum)
+
+crcs_freq_filt_df <- cbind.data.frame('crcs'=names(crcs_freq_filt), crcs_freq_filt)
+
+
+Y= mod.ds %>% 
+  dplyr::select(Y) %>%
+  pull(Y)
+
+set.seed(123) 
+#cv.lasso <- cv.glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial")
+cv.lasso_ls <- cv.glmnet(x=X_filt, y=Y, alpha = 1, family = "binomial")
+
+#cv.lasso
+#cv.lasso_ls
+# Fit the final model on the training data
+#mod1 <- glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial", lambda = cv.lasso$lambda.min)
+mod1_ls <- glmnet(x=X_filt, y=Y, alpha = 1, family = "binomial", lambda = cv.lasso_ls$lambda.min)
+coef(mod1_ls)
+#coefs <- coef(mod1)[,1]
+coefs_ls <- coef(mod1_ls)[,1]
+summary(mod1_ls)
+
+#mod1_ls$beta
+#mod1_ls$call
+#coef.df <- cbind.data.frame('coefs'=coefs, 'crcs_exp'=hcup::explain_ccsr(names(coefs)), 'crcs'=names(coefs) ) %>%
+ # left_join(crcs_freq_filt_df, by='crcs') %>%
+ # arrange(-coefs)
+
+coef.df_ls <- cbind.data.frame('coefs'=coefs_ls, 'crcs_exp'=hcup::explain_ccsr(names(coefs_ls)), 'crcs'=names(coefs_ls) ) %>%
+  left_join(crcs_freq_filt_df, by='crcs') %>%
+  arrange(-coefs_ls)
+#mod2 <- glmnet(x=X_filt, y=Y, alpha = 0, family = "binomial")
+
+coef.df_plot <- coef.df_ls %>% filter(!is.na(crcs_freq_filt)) %>% mutate(label = if_else(is.na(crcs_exp),crcs, crcs_exp ),
+                                                                         label = if_else(label == "sexM", "Male", label),
+                                                                         label = str_remove_all(label, "agec|race_recode_new|education_recode"))  # filter out intercept, also make the label name reasonable
+
+
+coef.df_plot <- coef.df_plot %>%
+  mutate(OR = exp(coefs),
+         OR_Category = ifelse(OR > 1, "OR > 1", "OR < 1"))
+
+
+
+fig3_lollipop <- ggplot(coef.df_plot, aes(x = reorder(label, OR), y = OR, color = OR_Category)) +
+  geom_segment(aes(xend = label, yend = 1), size = 1) +
+  geom_point(size = 3.5) +
+  geom_text(aes(label = sprintf("%.2f", OR), 
+                hjust = ifelse(OR < 1, 1.2, -0.2)),  
+            size = 3.5, color = "black") +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray50") +
+  coord_flip() + 
+  scale_color_manual(values = c("OR > 1" = "#00468BFF", "OR < 1" =  "#ED0000FF")) +
+  scale_y_continuous(trans = "log", 
+                     limits = c(0.4, 1.5),
+                     breaks = c(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5),
+                     expand = c(0, 0)) +
+  labs(title = "Lasso Regression Odds Ratios",
+       x = "Variables",
+       y = "Odds Ratio",
+       color = "OR Category") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank(),
+    plot.margin = margin(r = 20, l = 20, t = 20, b = 20),
+    axis.text.y = element_text(face = "bold"),
+    axis.line.x = element_line(color = "black"),
+    axis.ticks.x = element_line(),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.text.y.left = element_text(margin = margin(r = 10)),  
+    panel.spacing.y = unit(2, "cm")  
+  ) +
+  scale_x_discrete(expand = expansion(add = c(0.5, 0.5)))  
+
+
+# ggsave(fig3_lollipop, file = "figure/clean/fig3.png", width = 12, height = 8, dpi = 300)
+
+```
+
