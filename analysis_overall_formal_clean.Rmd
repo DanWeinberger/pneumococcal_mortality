@@ -67,9 +67,13 @@ Following CDC wonder: 6 race categories - American Indian or Alaska Native (AIAN
 
 # 1. Data preparation
 ```{r}
-pneumo.deaths.in <-  open_dataset("R/compiled_data.parquet", format = "parquet")  %>%
-  filter(grepl("J13|A39|J181|A403|B953|G001", all_icd)) %>%
- collect() %>%
+# pneumo.deaths.pq <-  open_dataset("R/compiled_data.parquet", format = "parquet")  %>%
+#   filter(grepl("J13|A39|J181|A403|B953|G001", all_icd)) %>%
+#  collect()
+# 
+# saveRDS(pneumo.deaths.pq,'./Data/pneumococcal_deaths.rds')
+
+pneumo.deaths.in <- readRDS('./Data/pneumococcal_deaths.rds') %>%
   mutate( 
    a403 = 1*grepl('A403',all_icd),
     j13 = 1*grepl('J13', all_icd),
