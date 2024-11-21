@@ -15,9 +15,7 @@ pred.coefs.reg.mean <-
                 Sigma = v.cov.mat)
 #if(model.type=='poisson'){
 #form2 <- update(mod$formula, 'N_deaths~. ')
-form1b <- as.character(mod$formula)
-#form1c <- paste0(form1b[2], form1b[1], form1b[3])
-form2 <- as.formula(gsub('N_deaths_pre','N_deaths',form1b))
+form2 <- as.formula(gsub('N_deaths_pre','N_deaths',mod$formula))
 # }else{
 # form2 <- formula(paste( 'N_deaths~'  ,paste0(names(coef(mod1))[-1], collapse='+')))
 # }
