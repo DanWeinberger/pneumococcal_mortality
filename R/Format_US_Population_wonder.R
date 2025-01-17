@@ -17,8 +17,8 @@ Format_US_Population_wonder <- function(){
    filter(Notes == '') %>%
    mutate( agec= if_else(Five.Year.Age.Groups.Code %in% c('1','1-4'), "Under 5 Years",
                   if_else(Five.Year.Age.Groups.Code %in% c('5-9','10-14','15-19','20-24'), "5-24 Years",
-                  if_else(Five.Year.Age.Groups.Code %in% c('25-29','30-34','35-39','40-44'),"25-44 years",
-                  if_else(Five.Year.Age.Groups.Code %in% c('45-49','50-54','55-59','60-64'),"45-64 years",
+                  if_else(Five.Year.Age.Groups.Code %in% c('25-29','30-34','35-39','40-44','45-49'),"25-49 years",
+                  if_else(Five.Year.Age.Groups.Code %in% c('50-54','55-59','60-64'),"50-64 years",
                   if_else(Five.Year.Age.Groups.Code %in% c('65-69','70-74'),"65-74 years",
                   if_else(Five.Year.Age.Groups.Code %in% c('75-79','80-84'),"75-84 years",
                   if_else(Five.Year.Age.Groups.Code %in% c('85+'),'85 years and older', NA_character_
@@ -75,7 +75,8 @@ Format_US_Population_wonder <- function(){
   
   filled_pop2 <- filled_pop2[,c('agec','race_recode','region','date','pop.interpol')]
   
-  saveRDS(filled_pop2,'./Data/pop_interpol.rds')
+  saveRDS(filled_pop2,'./Data/pop_interpol_50.rds')
   
   
 }
+#Format_US_Population_wonder()
